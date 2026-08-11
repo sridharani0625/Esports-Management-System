@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Esports Management System</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+
+    <h1>Esports Management System</h1>
+
+    <!-- LOGIN MODULE -->
+    <section>
+        <h2>Module 1 - User Login</h2>
+
+        <input type="email" id="loginEmail" placeholder="Email">
+        <input type="password" id="loginPassword" placeholder="Password">
+
+        <button onclick="login()">Login</button>
+
+        <p id="loginMessage"></p>
+    </section>
+
+
+    <!-- TOURNAMENT MODULE -->
+    <section>
+        <h2>Module 2 - Tournament Management</h2>
+
+        <input type="text" id="tournamentName" placeholder="Tournament Name">
+
+        <input type="text" id="game" placeholder="Game">
+
+        <textarea id="description" placeholder="Description"></textarea>
+
+        <input type="number" id="organizerId" placeholder="Organizer ID">
+
+        <button onclick="createTournament()">Create Tournament</button>
+
+        <button onclick="getTournaments()">View Tournaments</button>
+
+        <p id="tournamentMessage"></p>
+
+        <div id="tournamentList"></div>
+    </section>
+
+    <script src="script.js"></script>
+
+</body>
+</html>
