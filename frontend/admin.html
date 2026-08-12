@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Admin Dashboard</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+
+    <div class="container">
+
+        <h1>Admin Dashboard</h1>
+
+        <h2>Welcome, Admin</h2>
+
+        <p>You are logged in as an Administrator.</p>
+
+        <hr>
+
+        <h3>Admin Functions</h3>
+
+        <button>Manage Users</button>
+        <button>View Tournaments</button>
+        <button>View Audit Logs</button>
+
+        <br><br>
+
+        <button onclick="logout()">Logout</button>
+
+    </div>
+
+    <script>
+        function logout() {
+            localStorage.removeItem("access_token");
+            localStorage.removeItem("role");
+            window.location.href = "index.html";
+        }
+    </script>
+
+</body>
+</html>

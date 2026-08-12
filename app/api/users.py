@@ -17,7 +17,8 @@ def signup(user: UserCreate, db: Session = Depends(get_db)):
     new_user = User(
         username=user.username,
         email=user.email,
-        password=user.password
+        password=user.password,
+        role=user.role
     )
 
     db.add(new_user)
@@ -38,7 +39,8 @@ def signup(user: UserCreate, db: Session = Depends(get_db)):
     return {
         "message": "User created successfully",
         "username": new_user.username,
-        "email": new_user.email
+        "email": new_user.email,
+        "role": new_user.role
     }
 
 
@@ -64,6 +66,7 @@ def login(user: UserLogin, db: Session = Depends(get_db)):
     token_data = {
         "user_id": db_user.id,
         "email": db_user.email,
+        "role": db_user.role,
         "exp": datetime.utcnow() + timedelta(hours=1)
     }
 
@@ -77,6 +80,7 @@ def login(user: UserLogin, db: Session = Depends(get_db)):
         "message": "Login successful",
         "username": db_user.username,
         "email": db_user.email,
+        "role": db_user.role,
         "access_token": token,
         "token_type": "bearer"
     }

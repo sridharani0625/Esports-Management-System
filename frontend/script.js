@@ -1,6 +1,5 @@
 const API_URL = "http://127.0.0.1:8000";
 
-
 // =========================
 // MODULE 1 - LOGIN
 // =========================
@@ -34,12 +33,32 @@ async function login() {
                 localStorage.setItem("access_token", data.access_token);
             }
 
+            // Save user role
+            localStorage.setItem("role", data.role);
+
+            // Save username and email
+            localStorage.setItem("username", data.username);
+            localStorage.setItem("email", data.email);
+
             document.getElementById("loginMessage").innerText =
                 "Login successful!";
 
-            // Go to Module 2
+            // Redirect based on user role
             setTimeout(() => {
-                window.location.href = "tournament.html";
+
+                if (data.role === "ADMIN") {
+
+                    window.location.href = "admin.html";
+
+                } else if (data.role === "ORGANIZER") {
+
+                    window.location.href = "tournament.html";
+
+                } else {
+
+                    window.location.href = "player.html";
+                }
+
             }, 500);
 
         } else {
