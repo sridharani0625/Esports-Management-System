@@ -29,10 +29,18 @@ async function login() {
 
         if (response.ok) {
 
-            localStorage.setItem("access_token", data.access_token);
+            // Save JWT token
+            if (data.access_token) {
+                localStorage.setItem("access_token", data.access_token);
+            }
 
             document.getElementById("loginMessage").innerText =
-                "Login successful! JWT token received.";
+                "Login successful!";
+
+            // Go to Module 2
+            setTimeout(() => {
+                window.location.href = "tournament.html";
+            }, 500);
 
         } else {
 
@@ -43,6 +51,55 @@ async function login() {
     } catch (error) {
 
         document.getElementById("loginMessage").innerText =
+            "Cannot connect to backend.";
+
+        console.error(error);
+    }
+}
+
+
+// =========================
+// MODULE 1 - SIGNUP
+// =========================
+
+async function signup() {
+
+    const username = document.getElementById("signupUsername").value;
+    const email = document.getElementById("signupEmail").value;
+    const password = document.getElementById("signupPassword").value;
+
+    try {
+
+        const response = await fetch(`${API_URL}/signup`, {
+            method: "POST",
+
+            headers: {
+                "Content-Type": "application/json"
+            },
+
+            body: JSON.stringify({
+                username: username,
+                email: email,
+                password: password
+            })
+        });
+
+        const data = await response.json();
+
+        if (response.ok) {
+
+            document.getElementById("signupMessage").innerText =
+                "Signup successful! You can now login.";
+
+        } else {
+
+            document.getElementById("signupMessage").innerText =
+                data.detail || "Signup failed.";
+        }
+
+    } catch (error) {
+
+        document.getElementById("signupMessage").innerText =
             "Cannot connect to backend.";
 
         console.error(error);
@@ -103,7 +160,7 @@ async function createTournament() {
 
 
 // =========================
-// VIEW TOURNAMENTS
+// MODULE 2 - VIEW TOURNAMENTS
 // =========================
 
 async function getTournaments() {
@@ -121,6 +178,7 @@ async function getTournaments() {
         if (data.length === 0) {
 
             list.innerHTML = "<p>No tournaments found.</p>";
+
             return;
         }
 

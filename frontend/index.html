@@ -3,7 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Esports Management System</title>
+
+    <title>Esports Management System - Login</title>
+
     <link rel="stylesheet" href="style.css">
 </head>
 
@@ -11,39 +13,64 @@
 
     <h1>Esports Management System</h1>
 
-    <!-- LOGIN MODULE -->
+
+    <!-- LOGIN -->
     <section>
-        <h2>Module 1 - User Login</h2>
 
-        <input type="email" id="loginEmail" placeholder="Email">
-        <input type="password" id="loginPassword" placeholder="Password">
+        <h2>User Login</h2>
 
-        <button onclick="login()">Login</button>
+        <input
+            type="email"
+            id="loginEmail"
+            placeholder="Email"
+        >
+
+        <input
+            type="password"
+            id="loginPassword"
+            placeholder="Password"
+        >
+
+        <button onclick="login()">
+            Login
+        </button>
 
         <p id="loginMessage"></p>
+
     </section>
 
 
-    <!-- TOURNAMENT MODULE -->
+    <!-- SIGNUP -->
     <section>
-        <h2>Module 2 - Tournament Management</h2>
 
-        <input type="text" id="tournamentName" placeholder="Tournament Name">
+        <h2>New User? Sign Up</h2>
 
-        <input type="text" id="game" placeholder="Game">
+        <input
+            type="text"
+            id="signupUsername"
+            placeholder="Username"
+        >
 
-        <textarea id="description" placeholder="Description"></textarea>
+        <input
+            type="email"
+            id="signupEmail"
+            placeholder="Email"
+        >
 
-        <input type="number" id="organizerId" placeholder="Organizer ID">
+        <input
+            type="password"
+            id="signupPassword"
+            placeholder="Password"
+        >
 
-        <button onclick="createTournament()">Create Tournament</button>
+        <button onclick="signup()">
+            Sign Up
+        </button>
 
-        <button onclick="getTournaments()">View Tournaments</button>
+        <p id="signupMessage"></p>
 
-        <p id="tournamentMessage"></p>
-
-        <div id="tournamentList"></div>
     </section>
+
 
     <script src="script.js"></script>
 

@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>Tournament Management</title>
+
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+
+    <h1>Esports Management System</h1>
+
+    <section>
+        <h2>Tournament Management</h2>
+
+        <h3>Create Tournament</h3>
+
+        <input
+            type="text"
+            id="tournamentName"
+            placeholder="Tournament Name"
+        >
+
+        <input
+            type="text"
+            id="game"
+            placeholder="Game"
+        >
+
+        <textarea
+            id="description"
+            placeholder="Description"
+        ></textarea>
+
+        <input
+            type="number"
+            id="organizerId"
+            placeholder="Organizer ID"
+        >
+
+        <button onclick="createTournament()">
+            Create Tournament
+        </button>
+
+        <p id="tournamentMessage"></p>
+    </section>
+
+
+    <section>
+
+        <h3>Available Tournaments</h3>
+
+        <button onclick="getTournaments()">
+            View Tournaments
+        </button>
+
+        <div id="tournamentList"></div>
+
+    </section>
+
+
+    <script src="script.js"></script>
+
+</body>
+</html>
