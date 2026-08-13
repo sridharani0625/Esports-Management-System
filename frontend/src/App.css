@@ -1,0 +1,122 @@
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: Arial, sans-serif;
+  background: #f4f6f8;
+}
+
+button,
+input,
+select {
+  font: inherit;
+}
+
+.app {
+  min-height: 100vh;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 30px;
+}
+
+.auth-container,
+.dashboard {
+  width: 100%;
+  max-width: 500px;
+  background: white;
+  padding: 35px;
+  border-radius: 12px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+}
+
+h1 {
+  text-align: center;
+  margin-bottom: 30px;
+}
+
+h2 {
+  margin-bottom: 20px;
+}
+
+.tabs {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 25px;
+}
+
+.tabs button {
+  flex: 1;
+  padding: 12px;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  background: #ddd;
+}
+
+.tabs button.active {
+  background: #4f46e5;
+  color: white;
+}
+
+form {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+
+input,
+select {
+  width: 100%;
+  padding: 12px;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+}
+
+form button,
+.dashboard > button {
+  padding: 12px;
+  border: none;
+  border-radius: 6px;
+  background: #4f46e5;
+  color: white;
+  cursor: pointer;
+}
+
+form button:hover,
+.dashboard > button:hover {
+  background: #3730a3;
+}
+
+.message {
+  margin-top: 20px;
+  padding: 12px;
+  background: #eef2ff;
+  border-radius: 6px;
+  text-align: center;
+}
+
+.user-card {
+  padding: 20px;
+  background: #f4f6f8;
+  border-radius: 8px;
+  margin-bottom: 20px;
+}
+
+.role {
+  font-weight: bold;
+  color: #4f46e5;
+}
+
+.module {
+  padding: 20px;
+  margin-bottom: 20px;
+  background: #eef2ff;
+  border-radius: 8px;
+}
+
+.module p {
+  margin: 8px 0;
+}
