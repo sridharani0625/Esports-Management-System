@@ -15,3 +15,7 @@ class TournamentResponse(BaseModel):
     description: str
     organizer_id: int
     status: str
+
+    model_config = {
+        "from_attributes": True
+    }

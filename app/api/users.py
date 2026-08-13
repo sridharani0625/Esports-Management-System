@@ -3,21 +3,29 @@ from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 import jwt
 from datetime import datetime, timedelta
+from passlib.context import CryptContext
 
 from app.database import get_db
 from app.models.user import User
 from app.schemas.user import UserCreate, UserLogin
 
+pwd_context = CryptContext(
+    schemes=["bcrypt"],
+    deprecated="auto"
+)
+
 router = APIRouter()
 
 
 @router.post("/signup")
-def signup(user: UserCreate, db: Session = Depends(get_db)):
-
+def signup(
+    user: UserCreate,
+    db: Session = Depends(get_db)
+):
     new_user = User(
         username=user.username,
         email=user.email,
-        password=user.password,
+        password=pwd_context.hash(user.password),
         role=user.role
     )
 
@@ -45,8 +53,10 @@ def signup(user: UserCreate, db: Session = Depends(get_db)):
 
 
 @router.post("/login")
-def login(user: UserLogin, db: Session = Depends(get_db)):
-
+def login(
+    user: UserLogin,
+    db: Session = Depends(get_db)
+):
     db_user = db.query(User).filter(
         User.email == user.email
     ).first()
@@ -57,7 +67,10 @@ def login(user: UserLogin, db: Session = Depends(get_db)):
             detail="Invalid email or password"
         )
 
-    if db_user.password != user.password:
+    if not pwd_context.verify(
+        user.password,
+        db_user.password
+    ):
         raise HTTPException(
             status_code=400,
             detail="Invalid email or password"
@@ -78,6 +91,7 @@ def login(user: UserLogin, db: Session = Depends(get_db)):
 
     return {
         "message": "Login successful",
+        "user_id": db_user.id,
         "username": db_user.username,
         "email": db_user.email,
         "role": db_user.role,
