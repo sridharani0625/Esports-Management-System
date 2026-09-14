@@ -41,6 +41,10 @@ function App() {
   const [playerId, setPlayerId] = useState("");
   const [teamMembers, setTeamMembers] = useState([]);
 
+  const [adminStats, setAdminStats] = useState(null);
+  const [adminUsers, setAdminUsers] = useState([]);
+  const [auditLogs, setAuditLogs] = useState([]);
+
   // =========================
   // SIGNUP
   // =========================
@@ -75,27 +79,32 @@ function App() {
   // LOGIN
   // =========================
 
-  const login = async () => {
-    try {
-      const response = await axios.post(`${API_URL}/users/login`, {
-        email,
-        password,
-      });
+ const login = async () => {
+  try {
+    const response = await axios.post(`${API_URL}/users/login`, {
+      email,
+      password,
+    });
 
-      setUser(response.data);
+    setUser(response.data);
 
-      setMessage("Login successful");
+    localStorage.setItem(
+      "access_token",
+      response.data.access_token
+    );
 
-      setEmail("");
-      setPassword("");
+    setMessage("Login successful");
 
-      setPage("dashboard");
-    } catch (error) {
-      setMessage(
-        error.response?.data?.detail || "Login failed"
-      );
-    }
-  };
+    setEmail("");
+    setPassword("");
+
+    setPage("dashboard");
+  } catch (error) {
+    setMessage(
+      error.response?.data?.detail || "Login failed"
+    );
+  }
+};
 
   // =========================
   // LOGOUT
@@ -482,9 +491,6 @@ function App() {
     }
   };
 
-  // =========================
-  // TEAM MEMBERS
-  // =========================
 
   const openTeamMembers = async () => {
     try {
@@ -495,10 +501,7 @@ function App() {
       setPage("teamMembers");
       setMessage("");
     } catch (error) {
-      setMessage(
-        error.response?.data?.detail ||
-          "Could not load teams"
-      );
+      setMessage(error.response?.data?.detail || "Could not load teams");
     }
   };
 
@@ -507,49 +510,64 @@ function App() {
       setTeamMembers([]);
       return;
     }
-
     try {
-      const response = await axios.get(
-        `${API_URL}/teams/${teamId}/members`
-      );
+      const response = await axios.get(`${API_URL}/teams/${teamId}/members`);
       setTeamMembers(response.data);
       setMessage("");
     } catch (error) {
-      setMessage(
-        error.response?.data?.detail ||
-          "Could not load team members"
-      );
+      setMessage(error.response?.data?.detail || "Could not load team members");
     }
   };
 
   const addTeamMember = async () => {
     if (!selectedMemberTeam || !playerId) {
-      setMessage(
-        "Please select a team and enter player ID"
-      );
+      setMessage("Please select a team and enter player ID");
       return;
     }
-
     try {
-      await axios.post(
+      const response = await axios.post(
         `${API_URL}/teams/${selectedMemberTeam}/members`,
-        {
-          player_id: Number(playerId),
-        }
+        { player_id: Number(playerId) }
       );
-
-      setMessage(
-        "Player added to team successfully"
-      );
+      setMessage(response.data.message || "Player added to team successfully");
       setPlayerId("");
       await loadTeamMembers(selectedMemberTeam);
     } catch (error) {
       setMessage(
         error.response?.data?.detail ||
-          "Could not add player"
+        error.response?.data?.message ||
+        "Could not add player"
       );
     }
   };
+
+  const openAdminPanel = async () => {
+  try {
+    const token = localStorage.getItem("access_token");
+
+    const config = {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    };
+
+    const [stats, users, logs] = await Promise.all([
+      axios.get(`${API_URL}/admin/stats`, config),
+      axios.get(`${API_URL}/admin/users`, config),
+      axios.get(`${API_URL}/admin/audit-logs`, config),
+    ]);
+
+    setAdminStats(stats.data);
+    setAdminUsers(users.data);
+    setAuditLogs(logs.data);
+    setPage("admin");
+    setMessage("");
+  } catch (error) {
+    setMessage(
+      error.response?.data?.detail || "Could not load admin panel"
+    );
+  }
+};
 
   // =========================
   // LOGIN PAGE
@@ -731,6 +749,13 @@ function App() {
 
           <button
             className="btn btn-primary m-2"
+            onClick={openTeamMembers}
+          >
+            Team Members
+          </button>
+
+          <button
+            className="btn btn-primary m-2"
             onClick={openMatches}
           >
             View Matches
@@ -798,13 +823,6 @@ function App() {
               >
                 Enter Match Result
               </button>
-
-              <button
-                className="btn btn-primary m-2"
-                onClick={openTeamMembers}
-              >
-                Team Members
-              </button>
             </>
           )}
 
@@ -816,11 +834,7 @@ function App() {
 
               <button
                 className="btn btn-dark m-2"
-                onClick={() =>
-                  setMessage(
-                    "Admin panel will be added soon"
-                  )
-                }
+                onClick={openAdminPanel}
               >
                 Admin Panel
               </button>
@@ -1083,6 +1097,84 @@ function App() {
               {message}
             </div>
           )}
+        </div>
+      </div>
+    );
+  }
+
+
+  if (page === "teamMembers") {
+    return (
+      <div className="container mt-5">
+        <div className="card p-4">
+          <h2>Team Members</h2>
+          <p className="text-muted">Select a team to view and manage its players.</p>
+
+          <select
+            className="form-select mb-3"
+            value={selectedMemberTeam}
+            onChange={(e) => {
+              const teamId = e.target.value;
+              setSelectedMemberTeam(teamId);
+              loadTeamMembers(teamId);
+            }}
+          >
+            <option value="">Select Team</option>
+            {teams.map((team) => (
+              <option key={team.id} value={team.id}>{team.name}</option>
+            ))}
+          </select>
+
+          {selectedMemberTeam && (
+            <>
+              <h5>Add Player</h5>
+              <input
+                type="number"
+                className="form-control mb-3"
+                placeholder="Enter Player ID"
+                value={playerId}
+                onChange={(e) => setPlayerId(e.target.value)}
+              />
+              <button className="btn btn-success mb-4" onClick={addTeamMember}>
+                Add Player
+              </button>
+
+              <h5>Team Members</h5>
+              {teamMembers.length === 0 ? (
+                <p>No players found in this team.</p>
+              ) : (
+                <div className="table-responsive">
+                  <table className="table table-bordered table-striped">
+                    <thead>
+                      <tr>
+                        <th>Player ID</th>
+                        <th>Username</th>
+                        <th>Email</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {teamMembers.map((member) => (
+                        <tr key={member.id}>
+                          <td>{member.player_id}</td>
+                          <td>{member.username}</td>
+                          <td>{member.email}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </>
+          )}
+
+          <button
+            className="btn btn-secondary mt-3"
+            onClick={() => setPage("dashboard")}
+          >
+            Back
+          </button>
+
+          {message && <div className="alert alert-info mt-3">{message}</div>}
         </div>
       </div>
     );
@@ -1452,109 +1544,6 @@ function App() {
   }
 
   // =========================
-  // TEAM MEMBERS PAGE
-  // =========================
-
-  if (page === "teamMembers") {
-    return (
-      <div className="container mt-5">
-        <div className="card p-4">
-          <h2>Team Members</h2>
-
-          <p className="text-muted">
-            Select a team to view and manage its players.
-          </p>
-
-          <select
-            className="form-select mb-3"
-            value={selectedMemberTeam}
-            onChange={(e) => {
-              const teamId = e.target.value;
-              setSelectedMemberTeam(teamId);
-              loadTeamMembers(teamId);
-            }}
-          >
-            <option value="">Select Team</option>
-
-            {teams.map((team) => (
-              <option
-                key={team.id}
-                value={team.id}
-              >
-                {team.name}
-              </option>
-            ))}
-          </select>
-
-          {selectedMemberTeam && (
-            <>
-              <h5>Add Player</h5>
-
-              <input
-                type="number"
-                className="form-control mb-3"
-                placeholder="Enter Player ID"
-                value={playerId}
-                onChange={(e) =>
-                  setPlayerId(e.target.value)
-                }
-              />
-
-              <button
-                className="btn btn-success mb-4"
-                onClick={addTeamMember}
-              >
-                Add Player
-              </button>
-
-              <h5>Team Members</h5>
-
-              {teamMembers.length === 0 ? (
-                <p>No players found in this team.</p>
-              ) : (
-                <div className="table-responsive">
-                  <table className="table table-bordered table-striped">
-                    <thead>
-                      <tr>
-                        <th>Player ID</th>
-                        <th>Username</th>
-                        <th>Email</th>
-                      </tr>
-                    </thead>
-
-                    <tbody>
-                      {teamMembers.map((member) => (
-                        <tr key={member.id}>
-                          <td>{member.player_id}</td>
-                          <td>{member.username}</td>
-                          <td>{member.email}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </>
-          )}
-
-          <button
-            className="btn btn-secondary mt-3"
-            onClick={() => setPage("dashboard")}
-          >
-            Back
-          </button>
-
-          {message && (
-            <div className="alert alert-info mt-3">
-              {message}
-            </div>
-          )}
-        </div>
-      </div>
-    );
-  }
-
-  // =========================
   // LEADERBOARD PAGE
   // =========================
 
@@ -1603,6 +1592,82 @@ function App() {
         >
           Back
         </button>
+      </div>
+    );
+  }
+
+
+  if (page === "admin") {
+    return (
+      <div className="container mt-5">
+        <div className="card p-4">
+          <h2>Admin Panel</h2>
+          <p className="text-muted">System overview</p>
+
+          {adminStats && (
+            <div className="row">
+              {[
+                ["Total Users", adminStats.total_users],
+                ["Players", adminStats.players],
+                ["Organizers", adminStats.organizers],
+                ["Admins", adminStats.admins],
+                ["Tournaments", adminStats.tournaments],
+                ["Teams", adminStats.teams],
+                ["Matches", adminStats.matches]
+              ].map(([title, value]) => (
+                <div className="col-md-3 mb-3" key={title}>
+                  <div className="card p-3 text-center">
+                    <h5>{title}</h5>
+                    <h2>{value}</h2>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <hr />
+          <h4>Users</h4>
+          <div className="table-responsive">
+            <table className="table table-bordered table-striped">
+              <thead>
+                <tr><th>ID</th><th>Username</th><th>Email</th><th>Role</th></tr>
+              </thead>
+              <tbody>
+                {adminUsers.map((u) => (
+                  <tr key={u.id}>
+                    <td>{u.id}</td><td>{u.username}</td><td>{u.email}</td><td>{u.role}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <hr />
+          <h4>Audit Logs</h4>
+          <div className="table-responsive">
+            <table className="table table-bordered table-striped">
+              <thead>
+                <tr><th>ID</th><th>User</th><th>Action</th><th>Description</th><th>Created At</th></tr>
+              </thead>
+              <tbody>
+                {auditLogs.map((log) => (
+                  <tr key={log.id}>
+                    <td>{log.id}</td>
+                    <td>{log.username}</td>
+                    <td>{log.action}</td>
+                    <td>{log.description}</td>
+                    <td>{log.created_at}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <button className="btn btn-secondary mt-3" onClick={() => setPage("dashboard")}>
+            Back
+          </button>
+          {message && <div className="alert alert-info mt-3">{message}</div>}
+        </div>
       </div>
     );
   }
