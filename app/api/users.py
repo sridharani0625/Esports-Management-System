@@ -21,10 +21,14 @@ router = APIRouter(
 
 
 @router.post("/signup")
-def signup(
-    user: UserCreate,
-    db: Session = Depends(get_db)
-):
+def signup(user: UserCreate, db: Session = Depends(get_db)):
+
+    if user.role == "ADMIN":
+        raise HTTPException(
+            status_code=403,
+            detail="Admin accounts cannot be created through signup"
+        )
+
     new_user = User(
         username=user.username,
         email=user.email,
@@ -36,10 +40,8 @@ def signup(
 
     try:
         db.commit()
-
     except IntegrityError:
         db.rollback()
-
         raise HTTPException(
             status_code=400,
             detail="Username or email is already registered"
@@ -53,7 +55,6 @@ def signup(
         "email": new_user.email,
         "role": new_user.role
     }
-
 
 @router.post("/login")
 def login(
