@@ -14,7 +14,10 @@ pwd_context = CryptContext(
     deprecated="auto"
 )
 
-router = APIRouter()
+router = APIRouter(
+    prefix="/users",
+    tags=["Users"]
+)
 
 
 @router.post("/signup")
