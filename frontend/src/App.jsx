@@ -37,6 +37,10 @@ function App() {
 
   const [message, setMessage] = useState("");
 
+  const [selectedMemberTeam, setSelectedMemberTeam] = useState("");
+  const [playerId, setPlayerId] = useState("");
+  const [teamMembers, setTeamMembers] = useState([]);
+
   // =========================
   // SIGNUP
   // =========================
@@ -479,6 +483,75 @@ function App() {
   };
 
   // =========================
+  // TEAM MEMBERS
+  // =========================
+
+  const openTeamMembers = async () => {
+    try {
+      const response = await axios.get(`${API_URL}/teams/`);
+      setTeams(response.data);
+      setSelectedMemberTeam("");
+      setTeamMembers([]);
+      setPage("teamMembers");
+      setMessage("");
+    } catch (error) {
+      setMessage(
+        error.response?.data?.detail ||
+          "Could not load teams"
+      );
+    }
+  };
+
+  const loadTeamMembers = async (teamId) => {
+    if (!teamId) {
+      setTeamMembers([]);
+      return;
+    }
+
+    try {
+      const response = await axios.get(
+        `${API_URL}/teams/${teamId}/members`
+      );
+      setTeamMembers(response.data);
+      setMessage("");
+    } catch (error) {
+      setMessage(
+        error.response?.data?.detail ||
+          "Could not load team members"
+      );
+    }
+  };
+
+  const addTeamMember = async () => {
+    if (!selectedMemberTeam || !playerId) {
+      setMessage(
+        "Please select a team and enter player ID"
+      );
+      return;
+    }
+
+    try {
+      await axios.post(
+        `${API_URL}/teams/${selectedMemberTeam}/members`,
+        {
+          player_id: Number(playerId),
+        }
+      );
+
+      setMessage(
+        "Player added to team successfully"
+      );
+      setPlayerId("");
+      await loadTeamMembers(selectedMemberTeam);
+    } catch (error) {
+      setMessage(
+        error.response?.data?.detail ||
+          "Could not add player"
+      );
+    }
+  };
+
+  // =========================
   // LOGIN PAGE
   // =========================
 
@@ -724,6 +797,13 @@ function App() {
                 onClick={openResultPage}
               >
                 Enter Match Result
+              </button>
+
+              <button
+                className="btn btn-primary m-2"
+                onClick={openTeamMembers}
+              >
+                Team Members
               </button>
             </>
           )}
@@ -1356,6 +1436,109 @@ function App() {
 
           <button
             className="btn btn-secondary mt-2"
+            onClick={() => setPage("dashboard")}
+          >
+            Back
+          </button>
+
+          {message && (
+            <div className="alert alert-info mt-3">
+              {message}
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // =========================
+  // TEAM MEMBERS PAGE
+  // =========================
+
+  if (page === "teamMembers") {
+    return (
+      <div className="container mt-5">
+        <div className="card p-4">
+          <h2>Team Members</h2>
+
+          <p className="text-muted">
+            Select a team to view and manage its players.
+          </p>
+
+          <select
+            className="form-select mb-3"
+            value={selectedMemberTeam}
+            onChange={(e) => {
+              const teamId = e.target.value;
+              setSelectedMemberTeam(teamId);
+              loadTeamMembers(teamId);
+            }}
+          >
+            <option value="">Select Team</option>
+
+            {teams.map((team) => (
+              <option
+                key={team.id}
+                value={team.id}
+              >
+                {team.name}
+              </option>
+            ))}
+          </select>
+
+          {selectedMemberTeam && (
+            <>
+              <h5>Add Player</h5>
+
+              <input
+                type="number"
+                className="form-control mb-3"
+                placeholder="Enter Player ID"
+                value={playerId}
+                onChange={(e) =>
+                  setPlayerId(e.target.value)
+                }
+              />
+
+              <button
+                className="btn btn-success mb-4"
+                onClick={addTeamMember}
+              >
+                Add Player
+              </button>
+
+              <h5>Team Members</h5>
+
+              {teamMembers.length === 0 ? (
+                <p>No players found in this team.</p>
+              ) : (
+                <div className="table-responsive">
+                  <table className="table table-bordered table-striped">
+                    <thead>
+                      <tr>
+                        <th>Player ID</th>
+                        <th>Username</th>
+                        <th>Email</th>
+                      </tr>
+                    </thead>
+
+                    <tbody>
+                      {teamMembers.map((member) => (
+                        <tr key={member.id}>
+                          <td>{member.player_id}</td>
+                          <td>{member.username}</td>
+                          <td>{member.email}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </>
+          )}
+
+          <button
+            className="btn btn-secondary mt-3"
             onClick={() => setPage("dashboard")}
           >
             Back
