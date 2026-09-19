@@ -1,13 +1,16 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy import func
 import jwt
 from datetime import datetime, timedelta
 from passlib.context import CryptContext
+import re
 
 from app.database import get_db
 from app.models.user import User
 from app.schemas.user import UserCreate, UserLogin
+
 
 pwd_context = CryptContext(
     schemes=["bcrypt"],
@@ -19,19 +22,108 @@ router = APIRouter(
     tags=["Users"]
 )
 
+SECRET_KEY = "my-secret-key"
+
+
+def validate_email(email: str):
+    email = email.strip()
+
+    pattern = r"^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$"
+
+    if not re.match(pattern, email):
+        raise HTTPException(
+            status_code=400,
+            detail="Please enter a valid email address"
+        )
+
+
+def validate_password(password: str):
+    if len(password) < 8:
+        raise HTTPException(
+            status_code=400,
+            detail="Password must contain at least 8 characters"
+        )
+
+    if not re.search(r"[A-Z]", password):
+        raise HTTPException(
+            status_code=400,
+            detail="Password must contain at least one uppercase letter"
+        )
+
+    if not re.search(r"[a-z]", password):
+        raise HTTPException(
+            status_code=400,
+            detail="Password must contain at least one lowercase letter"
+        )
+
+    if not re.search(r"\d", password):
+        raise HTTPException(
+            status_code=400,
+            detail="Password must contain at least one number"
+        )
+
+    if not re.search(r"[^A-Za-z0-9]", password):
+        raise HTTPException(
+            status_code=400,
+            detail="Password must contain at least one special character"
+        )
+
 
 @router.post("/signup")
-def signup(user: UserCreate, db: Session = Depends(get_db)):
-
+def signup(
+    user: UserCreate,
+    db: Session = Depends(get_db)
+):
+    # Admin accounts cannot be created through public signup
     if user.role == "ADMIN":
         raise HTTPException(
             status_code=403,
             detail="Admin accounts cannot be created through signup"
         )
 
+    username = user.username.strip()
+    email = user.email.strip().lower()
+
+    if not username:
+        raise HTTPException(
+            status_code=400,
+            detail="Username cannot be empty"
+        )
+
+    if len(username) < 3:
+        raise HTTPException(
+            status_code=400,
+            detail="Username must contain at least 3 characters"
+        )
+
+    validate_email(email)
+    validate_password(user.password)
+
+    # Case-insensitive username check
+    existing_username = db.query(User).filter(
+        func.lower(User.username) == username.lower()
+    ).first()
+
+    if existing_username:
+        raise HTTPException(
+            status_code=400,
+            detail="Username already exists. Please choose another username."
+        )
+
+    # Case-insensitive email check
+    existing_email = db.query(User).filter(
+        func.lower(User.email) == email
+    ).first()
+
+    if existing_email:
+        raise HTTPException(
+            status_code=400,
+            detail="Email is already registered. Please use another email."
+        )
+
     new_user = User(
-        username=user.username,
-        email=user.email,
+        username=username,
+        email=email,
         password=pwd_context.hash(user.password),
         role=user.role
     )
@@ -40,8 +132,10 @@ def signup(user: UserCreate, db: Session = Depends(get_db)):
 
     try:
         db.commit()
+
     except IntegrityError:
         db.rollback()
+
         raise HTTPException(
             status_code=400,
             detail="Username or email is already registered"
@@ -56,13 +150,16 @@ def signup(user: UserCreate, db: Session = Depends(get_db)):
         "role": new_user.role
     }
 
+
 @router.post("/login")
 def login(
     user: UserLogin,
     db: Session = Depends(get_db)
 ):
+    email = user.email.strip().lower()
+
     db_user = db.query(User).filter(
-        User.email == user.email
+        func.lower(User.email) == email
     ).first()
 
     if not db_user:
@@ -89,7 +186,7 @@ def login(
 
     token = jwt.encode(
         token_data,
-        "my-secret-key",
+        SECRET_KEY,
         algorithm="HS256"
     )
 

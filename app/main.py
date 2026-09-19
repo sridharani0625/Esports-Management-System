@@ -14,6 +14,7 @@ from app.api.teams import router as teams_router
 from app.api.matches import router as matches_router
 from app.api.leaderboard import router as leaderboard_router
 from app.api.registration import router as registration_router
+from app.api.admin import router as admin_router
 
 
 Base.metadata.create_all(bind=engine)
@@ -40,6 +41,7 @@ app.include_router(teams_router)
 app.include_router(matches_router)
 app.include_router(leaderboard_router)
 app.include_router(registration_router)
+app.include_router(admin_router)
 
 
 @app.get("/")

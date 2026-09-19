@@ -10,6 +10,7 @@ function App() {
   const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [passwordFocused, setPasswordFocused] = useState(false);
   const [role, setRole] = useState("PLAYER");
 
   const [user, setUser] = useState(null);
@@ -46,32 +47,72 @@ function App() {
   const [auditLogs, setAuditLogs] = useState([]);
 
   // =========================
+  // PASSWORD VALIDATION
+  // =========================
+
+  const passwordRequirements = {
+    length: password.length >= 8,
+    uppercase: /[A-Z]/.test(password),
+    lowercase: /[a-z]/.test(password),
+    number: /\d/.test(password),
+    special: /[^A-Za-z0-9]/.test(password),
+  };
+
+  const passwordValid =
+    passwordRequirements.length &&
+    passwordRequirements.uppercase &&
+    passwordRequirements.lowercase &&
+    passwordRequirements.number &&
+    passwordRequirements.special;
+
+  const emailValid =
+    /^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/.test(
+      email.trim()
+    );
+
+  // =========================
   // SIGNUP
   // =========================
 
   const signup = async () => {
+    const cleanUsername = username.trim();
+    const cleanEmail = email.trim().toLowerCase();
+
+    if (cleanUsername.length < 3) {
+      setMessage("Username must contain at least 3 characters");
+      return;
+    }
+
+    if (!emailValid) {
+      setMessage("Please enter a valid email address");
+      return;
+    }
+
+    if (!passwordValid) {
+      setMessage("Please meet all password requirements");
+      return;
+    }
+
     try {
       const response = await axios.post(`${API_URL}/users/signup`, {
-        username,
-        email,
+        username: cleanUsername,
+        email: cleanEmail,
         password,
         role,
       });
 
       setMessage(response.data.message);
-
       setUsername("");
       setEmail("");
       setPassword("");
+      setPasswordFocused(false);
 
       setTimeout(() => {
         setPage("login");
         setMessage("");
       }, 1000);
     } catch (error) {
-      setMessage(
-        error.response?.data?.detail || "Signup failed"
-      );
+      setMessage(error.response?.data?.detail || "Signup failed");
     }
   };
 
@@ -79,38 +120,39 @@ function App() {
   // LOGIN
   // =========================
 
- const login = async () => {
-  try {
-    const response = await axios.post(`${API_URL}/users/login`, {
-      email,
-      password,
-    });
+  const login = async () => {
+    try {
+      const response = await axios.post(`${API_URL}/users/login`, {
+        email,
+        password,
+      });
 
-    setUser(response.data);
+      setUser(response.data);
 
-    localStorage.setItem(
-      "access_token",
-      response.data.access_token
-    );
+      localStorage.setItem(
+        "access_token",
+        response.data.access_token
+      );
 
-    setMessage("Login successful");
+      setMessage("Login successful");
 
-    setEmail("");
-    setPassword("");
+      setEmail("");
+      setPassword("");
 
-    setPage("dashboard");
-  } catch (error) {
-    setMessage(
-      error.response?.data?.detail || "Login failed"
-    );
-  }
-};
+      setPage("dashboard");
+    } catch (error) {
+      setMessage(
+        error.response?.data?.detail || "Login failed"
+      );
+    }
+  };
 
   // =========================
   // LOGOUT
   // =========================
 
   const logout = () => {
+    localStorage.removeItem("access_token");
     setUser(null);
     setPage("login");
     setMessage("");
@@ -142,12 +184,24 @@ function App() {
     }
 
     try {
-      await axios.post(`${API_URL}/tournaments/`, {
-        name,
-        game,
-        description,
-        organizer_id: user.user_id,
-      });
+      const token = localStorage.getItem("access_token");
+
+      const config = {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      };
+
+      await axios.post(
+        `${API_URL}/tournaments/`,
+        {
+          name,
+          game,
+          description,
+          organizer_id: user.user_id,
+        },
+        config
+      );
 
       setMessage("Tournament created successfully");
 
@@ -190,10 +244,22 @@ function App() {
     }
 
     try {
-      await axios.post(`${API_URL}/teams/`, {
-        name: teamName,
-        manager_id: user.user_id,
-      });
+      const token = localStorage.getItem("access_token");
+
+      const config = {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      };
+
+      await axios.post(
+        `${API_URL}/teams/`,
+        {
+          name: teamName,
+          manager_id: user.user_id,
+        },
+        config
+      );
 
       setMessage("Team created successfully");
 
@@ -525,9 +591,18 @@ function App() {
       return;
     }
     try {
+      const token = localStorage.getItem("access_token");
+
+      const config = {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      };
+
       const response = await axios.post(
         `${API_URL}/teams/${selectedMemberTeam}/members`,
-        { player_id: Number(playerId) }
+        { player_id: Number(playerId) },
+        config
       );
       setMessage(response.data.message || "Player added to team successfully");
       setPlayerId("");
@@ -542,32 +617,29 @@ function App() {
   };
 
   const openAdminPanel = async () => {
-  try {
-    const token = localStorage.getItem("access_token");
+    try {
+      const token = localStorage.getItem("access_token");
 
-    const config = {
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-    };
+      const config = {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      };
 
-    const [stats, users, logs] = await Promise.all([
-      axios.get(`${API_URL}/admin/stats`, config),
-      axios.get(`${API_URL}/admin/users`, config),
-      axios.get(`${API_URL}/admin/audit-logs`, config),
-    ]);
-
-    setAdminStats(stats.data);
-    setAdminUsers(users.data);
-    setAuditLogs(logs.data);
-    setPage("admin");
-    setMessage("");
-  } catch (error) {
-    setMessage(
-      error.response?.data?.detail || "Could not load admin panel"
-    );
-  }
-};
+      const [stats, users, logs] = await Promise.all([
+        axios.get(`${API_URL}/admin/stats`, config),
+        axios.get(`${API_URL}/admin/users`, config),
+        axios.get(`${API_URL}/admin/audit-logs`, config)
+      ]);
+      setAdminStats(stats.data);
+      setAdminUsers(users.data);
+      setAuditLogs(logs.data);
+      setPage("admin");
+      setMessage("");
+    } catch (error) {
+      setMessage(error.response?.data?.detail || "Could not load admin panel");
+    }
+  };
 
   // =========================
   // LOGIN PAGE
@@ -654,12 +726,34 @@ function App() {
           />
 
           <input
-            className="form-control mb-3"
+            className="form-control mb-2"
             type="password"
             placeholder="Password"
             value={password}
+            onFocus={() => setPasswordFocused(true)}
             onChange={(e) => setPassword(e.target.value)}
           />
+
+          {passwordFocused && (
+            <div className="border rounded p-3 mb-3 bg-light">
+              <div className="fw-bold mb-2">Password requirements</div>
+              <div className={passwordRequirements.length ? "text-success" : "text-danger"}>
+                {passwordRequirements.length ? "✓" : "✗"} At least 8 characters
+              </div>
+              <div className={passwordRequirements.uppercase ? "text-success" : "text-danger"}>
+                {passwordRequirements.uppercase ? "✓" : "✗"} One uppercase letter
+              </div>
+              <div className={passwordRequirements.lowercase ? "text-success" : "text-danger"}>
+                {passwordRequirements.lowercase ? "✓" : "✗"} One lowercase letter
+              </div>
+              <div className={passwordRequirements.number ? "text-success" : "text-danger"}>
+                {passwordRequirements.number ? "✓" : "✗"} One number
+              </div>
+              <div className={passwordRequirements.special ? "text-success" : "text-danger"}>
+                {passwordRequirements.special ? "✓" : "✗"} One special character
+              </div>
+            </div>
+          )}
 
           <select
             className="form-select mb-3"
@@ -668,14 +762,14 @@ function App() {
           >
             <option value="PLAYER">PLAYER</option>
             <option value="ORGANIZER">ORGANIZER</option>
-            <option value="ADMIN">ADMIN</option>
           </select>
 
           <button
             className="btn btn-success mb-2"
             onClick={signup}
+            disabled={username.trim().length < 3 || !emailValid || !passwordValid}
           >
-            Sign Up
+            Create Account
           </button>
 
           <button
@@ -1560,7 +1654,6 @@ function App() {
               <thead>
                 <tr>
                   <th>Rank</th>
-                  <th>Tournament</th>
                   <th>Team</th>
                   <th>Points</th>
                   <th>Wins</th>
@@ -1569,12 +1662,9 @@ function App() {
               </thead>
 
               <tbody>
-                {leaderboard.map((row) => (
-                  <tr key={row.id}>
+                {leaderboard.map((row, index) => (
+                  <tr key={`${row.team_name}-${index}`}>
                     <td>{row.rank}</td>
-                    <td>
-                      {row.tournament_name}
-                    </td>
                     <td>{row.team_name}</td>
                     <td>{row.points}</td>
                     <td>{row.wins}</td>

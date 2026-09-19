@@ -1,5 +1,6 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Header
 from sqlalchemy.orm import Session
+import jwt
 
 from app.database import get_db
 from app.models.tournament import Tournament
@@ -12,11 +13,64 @@ router = APIRouter(
 )
 
 
+SECRET_KEY = "my-secret-key"
+
+
+def organizer_required(authorization: str = Header(None)):
+    if not authorization:
+        raise HTTPException(
+            status_code=401,
+            detail="Authorization token required"
+        )
+
+    if not authorization.startswith("Bearer "):
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid authorization header"
+        )
+
+    token = authorization.split(" ")[1]
+
+    try:
+        payload = jwt.decode(
+            token,
+            SECRET_KEY,
+            algorithms=["HS256"]
+        )
+
+        if payload.get("role") != "ORGANIZER":
+            raise HTTPException(
+                status_code=403,
+                detail="Organizer access required"
+            )
+
+        return payload
+
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(
+            status_code=401,
+            detail="Token has expired"
+        )
+
+    except jwt.InvalidTokenError:
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid token"
+        )
+
+
 @router.post("/", response_model=TournamentResponse)
 def create_tournament(
     tournament: TournamentCreate,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    organizer=Depends(organizer_required)
 ):
+    if tournament.organizer_id != organizer.get("user_id"):
+        raise HTTPException(
+            status_code=403,
+            detail="You can only create tournaments for your own organizer account"
+        )
+
     new_tournament = Tournament(
         name=tournament.name,
         game=tournament.game,
