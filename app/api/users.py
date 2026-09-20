@@ -1,4 +1,6 @@
+import os
 
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi import APIRouter, Depends, HTTPException, Header
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
