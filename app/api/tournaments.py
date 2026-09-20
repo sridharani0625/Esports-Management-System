@@ -1,4 +1,5 @@
-from fastapi import APIRouter, Depends, HTTPException, Header
+from fastapi import APIRouter, Depends, HTTPException
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
 import jwt
 
@@ -6,30 +7,17 @@ from app.database import get_db
 from app.models.tournament import Tournament
 from app.schemas.tournament import TournamentCreate, TournamentResponse
 
-
-router = APIRouter(
-    prefix="/tournaments",
-    tags=["Tournaments"]
-)
-
+router = APIRouter(prefix="/tournaments", tags=["Tournaments"])
 
 SECRET_KEY = "my-secret-key"
 
+security = HTTPBearer()
 
-def organizer_required(authorization: str = Header(None)):
-    if not authorization:
-        raise HTTPException(
-            status_code=401,
-            detail="Authorization token required"
-        )
 
-    if not authorization.startswith("Bearer "):
-        raise HTTPException(
-            status_code=401,
-            detail="Invalid authorization header"
-        )
-
-    token = authorization.split(" ")[1]
+def organizer_required(
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+):
+    token = credentials.credentials
 
     try:
         payload = jwt.decode(

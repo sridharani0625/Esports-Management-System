@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Header
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy import func
@@ -10,7 +10,6 @@ import re
 from app.database import get_db
 from app.models.user import User
 from app.schemas.user import UserCreate, UserLogin
-
 
 pwd_context = CryptContext(
     schemes=["bcrypt"],
@@ -24,6 +23,10 @@ router = APIRouter(
 
 SECRET_KEY = "my-secret-key"
 
+
+# =========================
+# VALIDATION
+# =========================
 
 def validate_email(email: str):
     email = email.strip()
@@ -69,16 +72,74 @@ def validate_password(password: str):
         )
 
 
+# =========================
+# JWT AUTHENTICATION
+# =========================
+
+def get_current_user(authorization: str = Header(None)):
+
+    if not authorization:
+        raise HTTPException(
+            status_code=401,
+            detail="Authorization token required"
+        )
+
+    if not authorization.startswith("Bearer "):
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid authorization header"
+        )
+
+    token = authorization.split(" ")[1]
+
+    try:
+        return jwt.decode(
+            token,
+            SECRET_KEY,
+            algorithms=["HS256"]
+        )
+
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(
+            status_code=401,
+            detail="Token has expired"
+        )
+
+    except jwt.InvalidTokenError:
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid token"
+        )
+
+
+# =========================
+# SIGNUP
+# =========================
+
 @router.post("/signup")
 def signup(
     user: UserCreate,
     db: Session = Depends(get_db)
 ):
-    # Admin accounts cannot be created through public signup
+
+    # ADMIN cannot be created through public signup
     if user.role == "ADMIN":
         raise HTTPException(
             status_code=403,
             detail="Admin accounts cannot be created through signup"
+        )
+
+    # Only these roles are allowed through signup
+    allowed_roles = [
+        "PLAYER",
+        "TEAM_MANAGER",
+        "ORGANIZER"
+    ]
+
+    if user.role not in allowed_roles:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid role selected"
         )
 
     username = user.username.strip()
@@ -99,7 +160,7 @@ def signup(
     validate_email(email)
     validate_password(user.password)
 
-    # Case-insensitive username check
+    # Username duplicate check
     existing_username = db.query(User).filter(
         func.lower(User.username) == username.lower()
     ).first()
@@ -110,7 +171,7 @@ def signup(
             detail="Username already exists. Please choose another username."
         )
 
-    # Case-insensitive email check
+    # Email duplicate check
     existing_email = db.query(User).filter(
         func.lower(User.email) == email
     ).first()
@@ -151,11 +212,16 @@ def signup(
     }
 
 
+# =========================
+# LOGIN
+# =========================
+
 @router.post("/login")
 def login(
     user: UserLogin,
     db: Session = Depends(get_db)
 ):
+
     email = user.email.strip().lower()
 
     db_user = db.query(User).filter(
@@ -198,4 +264,94 @@ def login(
         "role": db_user.role,
         "access_token": token,
         "token_type": "bearer"
+    }
+
+
+# =========================
+# UPDATE OWN PROFILE
+# =========================
+
+@router.put("/profile")
+def update_profile(
+    username: str,
+    email: str,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user)
+):
+
+    user_id = current_user.get("user_id")
+
+    username = username.strip()
+    email = email.strip().lower()
+
+    if not username:
+        raise HTTPException(
+            status_code=400,
+            detail="Username cannot be empty"
+        )
+
+    if len(username) < 3:
+        raise HTTPException(
+            status_code=400,
+            detail="Username must contain at least 3 characters"
+        )
+
+    validate_email(email)
+
+    # Check username belongs to another user
+    existing_username = db.query(User).filter(
+        func.lower(User.username) == username.lower(),
+        User.id != user_id
+    ).first()
+
+    if existing_username:
+        raise HTTPException(
+            status_code=400,
+            detail="Username already exists"
+        )
+
+    # Check email belongs to another user
+    existing_email = db.query(User).filter(
+        func.lower(User.email) == email,
+        User.id != user_id
+    ).first()
+
+    if existing_email:
+        raise HTTPException(
+            status_code=400,
+            detail="Email is already registered"
+        )
+
+    db_user = db.query(User).filter(
+        User.id == user_id
+    ).first()
+
+    if not db_user:
+        raise HTTPException(
+            status_code=404,
+            detail="User not found"
+        )
+
+    db_user.username = username
+    db_user.email = email
+
+    try:
+        db.commit()
+
+    except IntegrityError:
+        db.rollback()
+
+        raise HTTPException(
+            status_code=400,
+            detail="Username or email already exists"
+        )
+
+    db.refresh(db_user)
+
+    return {
+        "message": "Profile updated successfully",
+        "user_id": db_user.id,
+        "username": db_user.username,
+        "email": db_user.email,
+        "role": db_user.role
     }
