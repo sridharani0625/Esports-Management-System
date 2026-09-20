@@ -1,3 +1,4 @@
+import os
 from fastapi import APIRouter, Depends, HTTPException, Header
 from sqlalchemy.orm import Session
 from sqlalchemy import text
@@ -10,7 +11,7 @@ router = APIRouter(
     tags=["Admin"]
 )
 
-SECRET_KEY = "my-secret-key"
+SECRET_KEY = os.getenv("JWT_SECRET_KEY")
 
 
 def admin_required(authorization: str = Header(None)):

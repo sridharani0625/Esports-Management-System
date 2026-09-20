@@ -1,3 +1,4 @@
+import os
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
@@ -18,7 +19,7 @@ router = APIRouter(
     tags=["Teams"]
 )
 
-SECRET_KEY = "my-secret-key"
+SECRET_KEY = os.getenv("JWT_SECRET_KEY")
 
 pwd_context = CryptContext(
     schemes=["bcrypt"],

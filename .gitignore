@@ -216,3 +216,18 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Local databases
+*.db
+*.sqlite
+*.sqlite3
+
+# Test database
+test.db
+
+# Backup files
+*_backup*
+*backup*
+
+# Old frontend copy
+frontend-old/

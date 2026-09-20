@@ -1,3 +1,4 @@
+import os
 from fastapi import APIRouter, Depends, HTTPException, Header
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
@@ -21,7 +22,7 @@ router = APIRouter(
     tags=["Users"]
 )
 
-SECRET_KEY = "my-secret-key"
+SECRET_KEY = os.getenv("JWT_SECRET_KEY")
 
 
 # =========================

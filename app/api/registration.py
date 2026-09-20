@@ -1,3 +1,4 @@
+import os
 from fastapi import APIRouter, Depends, HTTPException, Header
 from sqlalchemy.orm import Session
 from sqlalchemy import text
@@ -11,7 +12,7 @@ router = APIRouter(
     tags=["Registrations"]
 )
 
-SECRET_KEY = "my-secret-key"
+SECRET_KEY = os.getenv("JWT_SECRET_KEY")
 
 
 # =========================
