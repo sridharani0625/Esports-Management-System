@@ -6,6 +6,7 @@ from app.models.user import User
 from app.models.tournament import Tournament
 from app.models.team import Team
 from app.models.match import Match
+from app.models.team_member import TeamMember
 
 from app.api.users import router as users_router
 from app.api.tournaments import router as tournaments_router
