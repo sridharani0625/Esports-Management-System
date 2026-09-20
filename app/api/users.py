@@ -234,7 +234,6 @@ def login(
             status_code=400,
             detail="Invalid email or password"
         )
-    print("LOGIN DEBUG:", db_user.username, db_user.email, db_user.role)
 
     if not pwd_context.verify(
         user.password,
