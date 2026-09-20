@@ -1,4 +1,4 @@
-import os
+
 from fastapi import APIRouter, Depends, HTTPException, Header
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
@@ -234,6 +234,7 @@ def login(
             status_code=400,
             detail="Invalid email or password"
         )
+    print("LOGIN DEBUG:", db_user.username, db_user.email, db_user.role)
 
     if not pwd_context.verify(
         user.password,
