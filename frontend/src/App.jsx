@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import axios from "axios";
 import "bootstrap/dist/css/bootstrap.min.css";
 
@@ -42,7 +42,11 @@ function App() {
   const [selectedMemberTeam, setSelectedMemberTeam] = useState("");
   const [playerId, setPlayerId] = useState("");
   const [teamMembers, setTeamMembers] = useState([]);
-
+useEffect(() => {
+  if (page === "teamMembers") {
+    openTeamMembers();
+  }
+}, [page]);
   const [adminStats, setAdminStats] = useState(null);
   const [adminUsers, setAdminUsers] = useState([]);
   const [auditLogs, setAuditLogs] = useState([]);
