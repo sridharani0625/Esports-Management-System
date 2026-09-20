@@ -1,13 +1,14 @@
 import os
+import re
+
+import jwt
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from sqlalchemy.orm import Session
-from pydantic import BaseModel
-from sqlalchemy import text, func
-from sqlalchemy.exc import IntegrityError
-import jwt
 from passlib.context import CryptContext
-import re
+from pydantic import BaseModel
+from sqlalchemy import func, text
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models.team import Team
@@ -33,6 +34,7 @@ pwd_context = CryptContext(
 
 security = HTTPBearer()
 
+
 def get_current_user(
     credentials: HTTPAuthorizationCredentials = Depends(security)
 ):
@@ -56,6 +58,8 @@ def get_current_user(
             status_code=401,
             detail="Invalid token"
         )
+
+
 # =========================
 # TEAM MANAGER AUTHORIZATION
 # =========================
@@ -147,7 +151,6 @@ def create_team(
     db: Session = Depends(get_db),
     current_user=Depends(team_manager_required)
 ):
-
     if team.manager_id != current_user.get("user_id"):
         raise HTTPException(
             status_code=403,
@@ -178,8 +181,18 @@ def create_team(
     )
 
     db.add(new_team)
-    db.commit()
-    db.refresh(new_team)
+
+    try:
+        db.commit()
+        db.refresh(new_team)
+
+    except IntegrityError:
+        db.rollback()
+
+        raise HTTPException(
+            status_code=400,
+            detail="Could not create team"
+        )
 
     return {
         "message": "Team created successfully",
@@ -211,11 +224,7 @@ def create_player_for_team(
     db: Session = Depends(get_db),
     current_user=Depends(team_manager_required)
 ):
-
-    # ---------------------------------
     # Check team exists
-    # ---------------------------------
-
     team = db.query(Team).filter(
         Team.id == team_id
     ).first()
@@ -226,20 +235,12 @@ def create_player_for_team(
             detail="Team not found"
         )
 
-    # ---------------------------------
-    # Only the team owner can create
-    # players for that team
-    # ---------------------------------
-
+    # Only team manager can create players
     if team.manager_id != current_user.get("user_id"):
         raise HTTPException(
             status_code=403,
             detail="Only the team manager can create players for this team"
         )
-
-    # ---------------------------------
-    # Clean input
-    # ---------------------------------
 
     username = player.username.strip()
     email = player.email.strip().lower()
@@ -259,10 +260,6 @@ def create_player_for_team(
     validate_email(email)
     validate_password(player.password)
 
-    # ---------------------------------
-    # Check username
-    # ---------------------------------
-
     existing_username = db.query(User).filter(
         func.lower(User.username) == username.lower()
     ).first()
@@ -273,10 +270,6 @@ def create_player_for_team(
             detail="Username already exists. Please choose another username."
         )
 
-    # ---------------------------------
-    # Check email
-    # ---------------------------------
-
     existing_email = db.query(User).filter(
         func.lower(User.email) == email
     ).first()
@@ -286,10 +279,6 @@ def create_player_for_team(
             status_code=400,
             detail="Email is already registered. Please use another email."
         )
-
-    # ---------------------------------
-    # Create PLAYER account
-    # ---------------------------------
 
     new_player = User(
         username=username,
@@ -303,17 +292,13 @@ def create_player_for_team(
     try:
         db.flush()
 
-        # ---------------------------------
-        # Automatically add player to team
-        # ---------------------------------
-
         db.execute(
             text("""
-                insert into team_members (
+                INSERT INTO team_members (
                     team_id,
                     player_id
                 )
-                values (
+                VALUES (
                     :team_id,
                     :player_id
                 )
@@ -325,6 +310,7 @@ def create_player_for_team(
         )
 
         db.commit()
+        db.refresh(new_player)
 
     except IntegrityError:
         db.rollback()
@@ -333,8 +319,6 @@ def create_player_for_team(
             status_code=400,
             detail="Could not create player account"
         )
-
-    db.refresh(new_player)
 
     return {
         "message": "Player account created and added to team successfully",
@@ -358,7 +342,7 @@ def add_team_member(
     db: Session = Depends(get_db),
     current_user=Depends(team_manager_required)
 ):
-
+    # Check team exists
     team = db.query(Team).filter(
         Team.id == team_id
     ).first()
@@ -369,18 +353,20 @@ def add_team_member(
             detail="Team not found"
         )
 
+    # Only the manager of this team can add players
     if team.manager_id != current_user.get("user_id"):
         raise HTTPException(
             status_code=403,
             detail="Only the team manager can add members"
         )
 
+    # Check that the selected user exists and is a PLAYER
     player = db.execute(
         text("""
-            select id
-            from users
-            where id = :player_id
-            and role = 'PLAYER'
+            SELECT id
+            FROM users
+            WHERE id = :player_id
+              AND role = 'PLAYER'
         """),
         {
             "player_id": member.player_id
@@ -393,12 +379,13 @@ def add_team_member(
             detail="Player not found"
         )
 
+    # Check whether player is already in this team
     existing = db.execute(
         text("""
-            select id
-            from team_members
-            where team_id = :team_id
-            and player_id = :player_id
+            SELECT id
+            FROM team_members
+            WHERE team_id = :team_id
+              AND player_id = :player_id
         """),
         {
             "team_id": team_id,
@@ -412,27 +399,37 @@ def add_team_member(
             detail="Player is already a member of this team"
         )
 
-    result = db.execute(
-        text("""
-            insert into team_members (
-                team_id,
-                player_id
-            )
-            values (
-                :team_id,
-                :player_id
-            )
-            returning id, team_id, player_id
-        """),
-        {
-            "team_id": team_id,
-            "player_id": member.player_id
-        }
-    )
+    # Add player to team
+    try:
+        result = db.execute(
+            text("""
+                INSERT INTO team_members (
+                    team_id,
+                    player_id
+                )
+                VALUES (
+                    :team_id,
+                    :player_id
+                )
+                RETURNING id, team_id, player_id
+            """),
+            {
+                "team_id": team_id,
+                "player_id": member.player_id
+            }
+        )
 
-    db.commit()
+        row = result.fetchone()
 
-    row = result.fetchone()
+        db.commit()
+
+    except IntegrityError:
+        db.rollback()
+
+        raise HTTPException(
+            status_code=400,
+            detail="Could not add player to team"
+        )
 
     return {
         "message": "Player added to team successfully",
@@ -449,7 +446,6 @@ def get_team_members(
     team_id: int,
     db: Session = Depends(get_db)
 ):
-
     team = db.query(Team).filter(
         Team.id == team_id
     ).first()
@@ -462,17 +458,17 @@ def get_team_members(
 
     result = db.execute(
         text("""
-            select
+            SELECT
                 tm.id,
                 tm.team_id,
-                u.id as player_id,
+                u.id AS player_id,
                 u.username,
                 u.email
-            from team_members tm
-            join users u
-                on tm.player_id = u.id
-            where tm.team_id = :team_id
-            order by u.username
+            FROM team_members tm
+            JOIN users u
+                ON tm.player_id = u.id
+            WHERE tm.team_id = :team_id
+            ORDER BY u.username
         """),
         {
             "team_id": team_id
