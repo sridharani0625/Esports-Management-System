@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from sqlalchemy import text
+from sqlalchemy.exc import IntegrityError
 from pydantic import BaseModel
 from app.database import get_db
 from app.core.security import (
@@ -45,7 +46,7 @@ def register_team(
         {
             "team_id": registration.team_id
         }
-    ).fetchone()
+    ).first()
 
     if not team:
         raise HTTPException(
@@ -69,7 +70,7 @@ def register_team(
         {
             "tournament_id": registration.tournament_id
         }
-    ).fetchone()
+    ).first()
 
     if not tournament:
         raise HTTPException(
@@ -89,7 +90,7 @@ def register_team(
             "tournament_id": registration.tournament_id,
             "team_id": registration.team_id
         }
-    ).fetchone()
+    ).first()
 
     if existing:
         raise HTTPException(
@@ -121,9 +122,17 @@ def register_team(
         }
     )
 
-    db.commit()
-
     row = result.fetchone()
+    result.close()
+
+    try:
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        raise HTTPException(
+            status_code=409,
+            detail="This team is already registered for this tournament",
+        ) from exc
 
     return {
         "message": "Team registered successfully",
@@ -141,8 +150,32 @@ def get_registrations(
     current_user=Depends(get_current_user)
 ):
 
+    role = current_user.get("role")
+    user_id = current_user.get("user_id")
+    scope_clause = ""
+    scope_params = {}
+
+    if role == "ORGANIZER":
+        scope_clause = "where t.organizer_id = :user_id"
+        scope_params["user_id"] = user_id
+    elif role == "TEAM_MANAGER":
+        scope_clause = "where tm.manager_id = :user_id"
+        scope_params["user_id"] = user_id
+    elif role == "PLAYER":
+        scope_clause = """
+            where exists (
+                select 1
+                from team_members player_membership
+                where player_membership.team_id = r.team_id
+                  and player_membership.player_id = :user_id
+            )
+        """
+        scope_params["user_id"] = user_id
+    elif role != "ADMIN":
+        raise HTTPException(status_code=403, detail="Registration access denied")
+
     result = db.execute(
-        text("""
+        text(f"""
             select
                 r.id,
                 r.tournament_id,
@@ -155,13 +188,18 @@ def get_registrations(
                 on r.tournament_id = t.id
             join teams tm
                 on r.team_id = tm.id
+            {scope_clause}
             order by r.id
-        """)
+        """),
+        scope_params,
     )
+
+    rows = result.fetchall()
+    result.close()
 
     return [
         dict(row._mapping)
-        for row in result
+        for row in rows
     ]
 
 
@@ -192,7 +230,7 @@ def approve_registration(
         {
             "registration_id": registration_id
         }
-    ).fetchone()
+    ).first()
 
     if not registration:
         raise HTTPException(
@@ -206,10 +244,10 @@ def approve_registration(
             detail="Only the tournament organizer can approve this registration"
         )
 
-    if registration.status == "approved":
+    if registration.status != "pending":
         raise HTTPException(
             status_code=400,
-            detail="Registration is already approved"
+            detail="Only pending registrations can be approved"
         )
 
     result = db.execute(
@@ -228,11 +266,65 @@ def approve_registration(
         }
     )
 
-    db.commit()
-
     row = result.fetchone()
+    result.close()
+    db.commit()
 
     return {
         "message": "Registration approved successfully",
         **dict(row._mapping)
+    }
+
+
+@router.put("/{registration_id}/reject")
+def reject_registration(
+    registration_id: int,
+    db: Session = Depends(get_db),
+    current_user=Depends(organizer_required),
+):
+    registration = db.execute(
+        text("""
+            select
+                r.id,
+                r.status,
+                t.organizer_id
+            from registrations r
+            join tournaments t
+                on r.tournament_id = t.id
+            where r.id = :registration_id
+        """),
+        {"registration_id": registration_id},
+    ).first()
+
+    if not registration:
+        raise HTTPException(status_code=404, detail="Registration not found")
+
+    if registration.organizer_id != current_user.get("user_id"):
+        raise HTTPException(
+            status_code=403,
+            detail="Only the tournament organizer can reject this registration",
+        )
+
+    if registration.status != "pending":
+        raise HTTPException(
+            status_code=400,
+            detail="Only pending registrations can be rejected",
+        )
+
+    result = db.execute(
+        text("""
+            update registrations
+            set status = 'rejected'
+            where id = :registration_id
+            returning id, tournament_id, team_id, status
+        """),
+        {"registration_id": registration_id},
+    )
+    row = result.fetchone()
+    result.close()
+    db.commit()
+
+    return {
+        "message": "Registration rejected successfully",
+        **dict(row._mapping),
     }

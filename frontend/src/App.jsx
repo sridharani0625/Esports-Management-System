@@ -321,6 +321,10 @@ const createTeam = async () => {
 
   const openRegisterPage = async () => {
     try {
+      const token = localStorage.getItem("access_token");
+      const config = {
+        headers: { Authorization: `Bearer ${token}` },
+      };
       const tournamentResponse = await axios.get(
         `${API_URL}/tournaments/`
       );
@@ -331,7 +335,17 @@ const createTeam = async () => {
         `${API_URL}/teams/`
       );
 
-      setTeams(teamResponse.data);
+      const registrationResponse = await axios.get(
+        `${API_URL}/registrations/`,
+        config
+      );
+
+      setTeams(
+        teamResponse.data.filter(
+          (team) => team.manager_id === user.user_id
+        )
+      );
+      setRegistrations(registrationResponse.data);
 
       setPage("registerTeam");
       setMessage("");
@@ -417,6 +431,25 @@ const createTeam = async () => {
       setMessage(
         error.response?.data?.detail ||
           "Could not approve registration"
+      );
+    }
+  };
+
+  const rejectRegistration = async (registrationId) => {
+    try {
+      const token = localStorage.getItem("access_token");
+      await axios.put(
+        `${API_URL}/registrations/${registrationId}/reject`,
+        {},
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+
+      setMessage("Registration rejected successfully");
+      openManageRegistrations();
+    } catch (error) {
+      setMessage(
+        error.response?.data?.detail ||
+          "Could not reject registration"
       );
     }
   };
@@ -1081,6 +1114,25 @@ const createTeam = async () => {
             {teams.map((team) => <option key={team.id} value={team.id}>{team.name}</option>)}
           </select>
           <button className="pro-btn pro-btn-primary w-100 mt-4" onClick={registerTeam}>Submit registration</button>
+          {registrations.length > 0 && (
+            <div className="mt-4">
+              <span className="kicker">Your registration status</span>
+              <div className="table-wrap mt-2">
+                <table className="pro-table">
+                  <thead><tr><th>Tournament</th><th>Team</th><th>Status</th></tr></thead>
+                  <tbody>
+                    {registrations.map((registration) => (
+                      <tr key={registration.id}>
+                        <td>{registration.tournament_name}</td>
+                        <td>{registration.team_name}</td>
+                        <td><StatusBadge status={registration.status} /></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
           {message && <MessageBanner message={message} />}
         </div>
       </AppLayout>
@@ -1164,7 +1216,16 @@ const createTeam = async () => {
                       <td><strong>{registration.tournament_name}</strong></td>
                       <td>{registration.team_name}</td>
                       <td><StatusBadge status={registration.status} /></td>
-                      <td>{registration.status === "pending" ? <button className="small-action approve" onClick={() => approveRegistration(registration.id)}>Approve</button> : <span className="text-muted-custom">Completed</span>}</td>
+                      <td>
+                        {registration.status === "pending" ? (
+                          <div className="d-flex gap-2">
+                            <button className="small-action approve" onClick={() => approveRegistration(registration.id)}>Approve</button>
+                            <button className="small-action reject" onClick={() => rejectRegistration(registration.id)}>Reject</button>
+                          </div>
+                        ) : (
+                          <span className="text-muted-custom">Completed</span>
+                        )}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
