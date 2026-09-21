@@ -34,6 +34,7 @@ app.add_middleware(
     allow_origins=[
         "http://localhost:5173",
         "https://esports-management-system.vercel.app",
+        "https://esports-management-system-1.onrender.com",
     ],
     allow_credentials=True,
     allow_methods=["*"],
