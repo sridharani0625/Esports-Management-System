@@ -1,7 +1,6 @@
 import os
 
 from fastapi import APIRouter, Depends, HTTPException
-from fastapi import APIRouter, Depends, HTTPException, Header
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy import func
@@ -11,6 +10,7 @@ from passlib.context import CryptContext
 import re
 
 from app.database import get_db
+from app.core.security import get_current_user
 from app.models.user import User
 from app.schemas.user import UserCreate, UserLogin
 
@@ -72,46 +72,6 @@ def validate_password(password: str):
         raise HTTPException(
             status_code=400,
             detail="Password must contain at least one special character"
-        )
-
-
-# =========================
-# JWT AUTHENTICATION
-# =========================
-
-def get_current_user(authorization: str = Header(None)):
-
-    if not authorization:
-        raise HTTPException(
-            status_code=401,
-            detail="Authorization token required"
-        )
-
-    if not authorization.startswith("Bearer "):
-        raise HTTPException(
-            status_code=401,
-            detail="Invalid authorization header"
-        )
-
-    token = authorization.split(" ")[1]
-
-    try:
-        return jwt.decode(
-            token,
-            SECRET_KEY,
-            algorithms=["HS256"]
-        )
-
-    except jwt.ExpiredSignatureError:
-        raise HTTPException(
-            status_code=401,
-            detail="Token has expired"
-        )
-
-    except jwt.InvalidTokenError:
-        raise HTTPException(
-            status_code=401,
-            detail="Invalid token"
         )
 
 
@@ -255,8 +215,8 @@ def login(
 
     token = jwt.encode(
         token_data,
-        SECRET_KEY,
-        algorithm="HS256"
+        os.getenv("JWT_SECRET_KEY"),
+        algorithm=os.getenv("JWT_ALGORITHM", "HS256"),
     )
 
     return {

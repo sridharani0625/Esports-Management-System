@@ -1,52 +1,12 @@
-import os
 from fastapi import APIRouter, Depends, HTTPException
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
-import jwt
 
 from app.database import get_db
 from app.models.tournament import Tournament
 from app.schemas.tournament import TournamentCreate, TournamentResponse
+from app.core.security import organizer_required
 
 router = APIRouter(prefix="/tournaments", tags=["Tournaments"])
-
-SECRET_KEY = os.getenv("JWT_SECRET_KEY")
-
-security = HTTPBearer()
-
-
-def organizer_required(
-    credentials: HTTPAuthorizationCredentials = Depends(security)
-):
-    token = credentials.credentials
-
-    try:
-        payload = jwt.decode(
-            token,
-            SECRET_KEY,
-            algorithms=["HS256"]
-        )
-
-        if payload.get("role") != "ORGANIZER":
-            raise HTTPException(
-                status_code=403,
-                detail="Organizer access required"
-            )
-
-        return payload
-
-    except jwt.ExpiredSignatureError:
-        raise HTTPException(
-            status_code=401,
-            detail="Token has expired"
-        )
-
-    except jwt.InvalidTokenError:
-        raise HTTPException(
-            status_code=401,
-            detail="Invalid token"
-        )
-
 
 @router.post("/", response_model=TournamentResponse)
 def create_tournament(

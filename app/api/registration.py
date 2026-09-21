@@ -1,91 +1,18 @@
-import os
-from fastapi import APIRouter, Depends, HTTPException, Header
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 from pydantic import BaseModel
-import jwt
-
 from app.database import get_db
+from app.core.security import (
+    get_current_user,
+    organizer_required,
+    team_manager_required,
+)
 
 router = APIRouter(
     prefix="/registrations",
     tags=["Registrations"]
 )
-
-SECRET_KEY = os.getenv("JWT_SECRET_KEY")
-
-
-# =========================
-# JWT AUTHENTICATION
-# =========================
-
-def get_current_user(
-    authorization: str = Header(None)
-):
-
-    if not authorization:
-        raise HTTPException(
-            status_code=401,
-            detail="Authorization token required"
-        )
-
-    if not authorization.startswith("Bearer "):
-        raise HTTPException(
-            status_code=401,
-            detail="Invalid authorization header"
-        )
-
-    token = authorization.split(" ")[1]
-
-    try:
-        return jwt.decode(
-            token,
-            SECRET_KEY,
-            algorithms=["HS256"]
-        )
-
-    except jwt.ExpiredSignatureError:
-        raise HTTPException(
-            status_code=401,
-            detail="Token has expired"
-        )
-
-    except jwt.InvalidTokenError:
-        raise HTTPException(
-            status_code=401,
-            detail="Invalid token"
-        )
-
-
-# =========================
-# ROLE CHECKS
-# =========================
-
-def team_manager_required(
-    user=Depends(get_current_user)
-):
-
-    if user.get("role") != "TEAM_MANAGER":
-        raise HTTPException(
-            status_code=403,
-            detail="Team manager access required"
-        )
-
-    return user
-
-
-def organizer_required(
-    user=Depends(get_current_user)
-):
-
-    if user.get("role") != "ORGANIZER":
-        raise HTTPException(
-            status_code=403,
-            detail="Organizer access required"
-        )
-
-    return user
-
 
 # =========================
 # SCHEMA

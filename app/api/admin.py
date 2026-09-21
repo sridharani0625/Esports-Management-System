@@ -1,62 +1,13 @@
-import os
-from fastapi import APIRouter, Depends, HTTPException, Header
+from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 from sqlalchemy import text
-import jwt
-
 from app.database import get_db
+from app.core.security import admin_required
 
 router = APIRouter(
     prefix="/admin",
     tags=["Admin"]
 )
-
-SECRET_KEY = os.getenv("JWT_SECRET_KEY")
-
-
-def admin_required(authorization: str = Header(None)):
-
-    if not authorization:
-        raise HTTPException(
-            status_code=401,
-            detail="Authorization token required"
-        )
-
-    if not authorization.startswith("Bearer "):
-        raise HTTPException(
-            status_code=401,
-            detail="Invalid authorization header"
-        )
-
-    token = authorization.split(" ")[1]
-
-    try:
-        payload = jwt.decode(
-            token,
-            SECRET_KEY,
-            algorithms=["HS256"]
-        )
-
-        if payload.get("role") != "ADMIN":
-            raise HTTPException(
-                status_code=403,
-                detail="Admin access required"
-            )
-
-        return payload
-
-    except jwt.ExpiredSignatureError:
-        raise HTTPException(
-            status_code=401,
-            detail="Token has expired"
-        )
-
-    except jwt.InvalidTokenError:
-        raise HTTPException(
-            status_code=401,
-            detail="Invalid token"
-        )
-
 
 @router.get("/users")
 def get_all_users(

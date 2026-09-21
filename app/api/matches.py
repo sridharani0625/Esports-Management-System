@@ -1,10 +1,11 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 from pydantic import BaseModel
 from datetime import datetime
 
 from app.database import get_db
+from app.core.security import organizer_required
 
 router = APIRouter(
     prefix="/matches",
@@ -69,12 +70,32 @@ def get_matches(
 @router.post("/")
 def schedule_match(
     match: MatchCreate,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    organizer=Depends(organizer_required),
 ):
     if match.team1_id == match.team2_id:
-        return {
-            "message": "A team cannot play against itself"
-        }
+        raise HTTPException(
+            status_code=400,
+            detail="A team cannot play against itself",
+        )
+
+    tournament = db.execute(
+        text("""
+            select id
+            from tournaments
+            where id = :tournament_id
+              and organizer_id = :organizer_id
+        """),
+        {
+            "tournament_id": match.tournament_id,
+            "organizer_id": organizer["user_id"],
+        },
+    ).fetchone()
+    if tournament is None:
+        raise HTTPException(
+            status_code=403,
+            detail="You can only schedule matches for your own tournaments",
+        )
 
     query = text("""
         insert into matches (
@@ -125,39 +146,46 @@ def schedule_match(
 def enter_match_result(
     match_id: int,
     match_result: MatchResult,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    organizer=Depends(organizer_required),
 ):
 
     # Check match exists
     check_query = text("""
         select
             id,
+            tournament_id,
             team1_id,
             team2_id
         from matches
-        where id = :match_id;
+        where id = :match_id
+          and tournament_id in (
+              select id
+              from tournaments
+              where organizer_id = :organizer_id
+          );
     """)
 
     match = db.execute(
         check_query,
         {
-            "match_id": match_id
+            "match_id": match_id,
+            "organizer_id": organizer["user_id"],
         }
     ).fetchone()
 
     if not match:
-        return {
-            "message": "Match not found"
-        }
+        raise HTTPException(status_code=404, detail="Match not found")
 
     # Check winner is one of the two teams
     if match_result.winner_id not in [
         match.team1_id,
         match.team2_id
     ]:
-        return {
-            "message": "Winner must be one of the teams in this match"
-        }
+        raise HTTPException(
+            status_code=400,
+            detail="Winner must be one of the teams in this match",
+        )
 
     # Update result
     update_query = text("""

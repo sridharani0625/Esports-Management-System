@@ -1,9 +1,6 @@
-import os
 import re
 
-import jwt
 from fastapi import APIRouter, Depends, HTTPException
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from passlib.context import CryptContext
 from pydantic import BaseModel
 from sqlalchemy import func, text
@@ -13,6 +10,7 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models.team import Team
 from app.models.user import User
+from app.core.security import team_manager_required
 
 
 router = APIRouter(
@@ -20,60 +18,10 @@ router = APIRouter(
     tags=["Teams"]
 )
 
-SECRET_KEY = os.getenv("JWT_SECRET_KEY")
-
 pwd_context = CryptContext(
     schemes=["bcrypt"],
     deprecated="auto"
 )
-
-
-# =========================
-# JWT AUTHENTICATION
-# =========================
-
-security = HTTPBearer()
-
-
-def get_current_user(
-    credentials: HTTPAuthorizationCredentials = Depends(security)
-):
-    token = credentials.credentials
-
-    try:
-        return jwt.decode(
-            token,
-            SECRET_KEY,
-            algorithms=["HS256"]
-        )
-
-    except jwt.ExpiredSignatureError:
-        raise HTTPException(
-            status_code=401,
-            detail="Token has expired"
-        )
-
-    except jwt.InvalidTokenError:
-        raise HTTPException(
-            status_code=401,
-            detail="Invalid token"
-        )
-
-
-# =========================
-# TEAM MANAGER AUTHORIZATION
-# =========================
-
-def team_manager_required(
-    user=Depends(get_current_user)
-):
-    if user.get("role") != "TEAM_MANAGER":
-        raise HTTPException(
-            status_code=403,
-            detail="Team manager access required"
-        )
-
-    return user
 
 
 # =========================
@@ -434,6 +382,42 @@ def add_team_member(
     return {
         "message": "Player added to team successfully",
         **dict(row._mapping)
+    }
+
+
+@router.delete("/{team_id}/members/{player_id}")
+def remove_team_member(
+    team_id: int,
+    player_id: int,
+    db: Session = Depends(get_db),
+    current_user=Depends(team_manager_required),
+):
+    team = db.query(Team).filter(Team.id == team_id).first()
+    if not team:
+        raise HTTPException(status_code=404, detail="Team not found")
+    if team.manager_id != current_user["user_id"]:
+        raise HTTPException(
+            status_code=403,
+            detail="Only the team manager can remove members",
+        )
+
+    result = db.execute(
+        text("""
+            DELETE FROM team_members
+            WHERE team_id = :team_id
+              AND player_id = :player_id
+            RETURNING id, team_id, player_id
+        """),
+        {"team_id": team_id, "player_id": player_id},
+    )
+    row = result.fetchone()
+    if row is None:
+        raise HTTPException(status_code=404, detail="Team member not found")
+
+    db.commit()
+    return {
+        "message": "Player removed from team successfully",
+        **dict(row._mapping),
     }
 
 
