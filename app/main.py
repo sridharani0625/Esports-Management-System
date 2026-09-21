@@ -1,13 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.database import Base, engine
-from app.models.user import User
-from app.models.tournament import Tournament
-from app.models.team import Team
-from app.models.match import Match
-from app.models.team_member import TeamMember
-
 from app.api.users import router as users_router
 from app.api.tournaments import router as tournaments_router
 from app.api.teams import router as teams_router
@@ -15,10 +8,6 @@ from app.api.matches import router as matches_router
 from app.api.leaderboard import router as leaderboard_router
 from app.api.registration import router as registration_router
 from app.api.admin import router as admin_router
-
-
-# Create database tables
-Base.metadata.create_all(bind=engine)
 
 
 # Create FastAPI application
