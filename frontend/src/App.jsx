@@ -1610,7 +1610,6 @@ const AppLayout = ({ user, page, setPage, logout, children }) => {
 
           <div className="side-label">My workspace</div>
           <div className="side-nav">
-            {user?.role === "PLAYER" && <button className={`side-btn ${page === "registerTeam" ? "active" : ""}`} onClick={() => go("registerTeam")}><Icon.Clipboard />Register team</button>}
             {user?.role === "TEAM_MANAGER" && <button className={`side-btn ${page === "createTeam" ? "active" : ""}`} onClick={() => go("createTeam")}><Icon.Plus />Create my team</button>}
             {user?.role === "ORGANIZER" && <>
               <button className={`side-btn ${page === "createTournament" ? "active" : ""}`} onClick={() => go("createTournament")}><Icon.Plus />Create tournament</button>
