@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import text
 from pydantic import BaseModel
 from datetime import datetime
+import re
 
 from app.database import get_db
 from app.core.security import organizer_required
@@ -25,6 +26,68 @@ class MatchResult(BaseModel):
     result: str
 
 
+def update_leaderboard(db: Session, tournament_id: int, winner_id: int, loser_id: int) -> None:
+    for team_id in (winner_id, loser_id):
+        row = db.execute(
+            text("""
+                select id
+                from leaderboard
+                where tournament_id = :tournament_id
+                  and team_id = :team_id
+            """),
+            {"tournament_id": tournament_id, "team_id": team_id},
+        ).first()
+        if row is None:
+            db.execute(
+                text("""
+                    insert into leaderboard (
+                        tournament_id, team_id, rank, points, wins, losses
+                    )
+                    values (:tournament_id, :team_id, 1, 0, 0, 0)
+                """),
+                {"tournament_id": tournament_id, "team_id": team_id},
+            )
+
+    db.execute(
+        text("""
+            update leaderboard
+            set wins = wins + 1,
+                points = points + 3
+            where tournament_id = :tournament_id
+              and team_id = :winner_id
+        """),
+        {"tournament_id": tournament_id, "winner_id": winner_id},
+    )
+    db.execute(
+        text("""
+            update leaderboard
+            set losses = losses + 1
+            where tournament_id = :tournament_id
+              and team_id = :loser_id
+        """),
+        {"tournament_id": tournament_id, "loser_id": loser_id},
+    )
+
+    rows = db.execute(
+        text("""
+            select id
+            from leaderboard
+            where tournament_id = :tournament_id
+            order by points desc, wins desc, id
+        """),
+        {"tournament_id": tournament_id},
+    ).fetchall()
+    for rank, row in enumerate(rows, start=1):
+        db.execute(
+            text("""
+                update leaderboard
+                set rank = :rank
+                where id = :id
+            """),
+            {"rank": rank, "id": row.id},
+        )
+
+
 # =========================
 # VIEW MATCHES
 # =========================
@@ -36,6 +99,8 @@ def get_matches(
     query = text("""
         select
             m.id,
+            m.team1_id,
+            m.team2_id,
             t.name as tournament_name,
             t.game,
             team1.name as team1_name,
@@ -90,11 +155,42 @@ def schedule_match(
             "tournament_id": match.tournament_id,
             "organizer_id": organizer["user_id"],
         },
-    ).fetchone()
+    ).first()
     if tournament is None:
         raise HTTPException(
             status_code=403,
             detail="You can only schedule matches for your own tournaments",
+        )
+
+    teams = db.execute(
+        text("""
+            select id
+            from teams
+            where id in (:team1_id, :team2_id)
+        """),
+        {"team1_id": match.team1_id, "team2_id": match.team2_id},
+    ).fetchall()
+    if len(teams) != 2:
+        raise HTTPException(status_code=404, detail="One or both teams were not found")
+
+    approved_count = db.execute(
+        text("""
+            select count(*) as count
+            from registrations
+            where tournament_id = :tournament_id
+              and team_id in (:team1_id, :team2_id)
+              and status = 'approved'
+        """),
+        {
+            "tournament_id": match.tournament_id,
+            "team1_id": match.team1_id,
+            "team2_id": match.team2_id,
+        },
+    ).scalar()
+    if approved_count != 2:
+        raise HTTPException(
+            status_code=400,
+            detail="Both teams must have approved registrations for this tournament",
         )
 
     query = text("""
@@ -128,9 +224,9 @@ def schedule_match(
         }
     )
 
-    db.commit()
-
     row = result.fetchone()
+    result.close()
+    db.commit()
 
     return {
         "message": "Match scheduled successfully",
@@ -172,7 +268,7 @@ def enter_match_result(
             "match_id": match_id,
             "organizer_id": organizer["user_id"],
         }
-    ).fetchone()
+    ).first()
 
     if not match:
         raise HTTPException(status_code=404, detail="Match not found")
@@ -185,6 +281,12 @@ def enter_match_result(
         raise HTTPException(
             status_code=400,
             detail="Winner must be one of the teams in this match",
+        )
+
+    if re.fullmatch(r"\d+-\d+", match_result.result.strip()) is None:
+        raise HTTPException(
+            status_code=400,
+            detail="Result must use a score format such as 2-1",
         )
 
     # Update result
@@ -212,9 +314,20 @@ def enter_match_result(
         }
     )
 
-    db.commit()
-
     row = result.fetchone()
+    result.close()
+    loser_id = (
+        match.team2_id
+        if match_result.winner_id == match.team1_id
+        else match.team1_id
+    )
+    update_leaderboard(
+        db,
+        match.tournament_id,
+        match_result.winner_id,
+        loser_id,
+    )
+    db.commit()
 
     return {
         "message": "Match result updated successfully",

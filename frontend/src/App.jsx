@@ -219,7 +219,7 @@ const login = async () => {
 
       const config = {
         headers: {
-          Authorization: `Bearer ${token}`,
+          Authorization: `Bearer ${response.data.access_token}`
         },
       };
 
@@ -278,10 +278,10 @@ const createTeam = async () => {
     const token = localStorage.getItem("access_token");
 
     const config = {
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-    };
+        headers: {
+          Authorization: `Bearer ${response.data.access_token}`
+        },
+      };
 
     const response = await axios.post(
       `${API_URL}/teams/`,
@@ -323,7 +323,7 @@ const createTeam = async () => {
     try {
       const token = localStorage.getItem("access_token");
       const config = {
-        headers: { Authorization: `Bearer ${token}` },
+        headers: { Authorization: "Bearer " + token },
       };
       const tournamentResponse = await axios.get(
         `${API_URL}/tournaments/`
@@ -373,7 +373,7 @@ const createTeam = async () => {
           tournament_id: Number(selectedTournament),
           team_id: Number(selectedTeam),
         },
-        { headers: { Authorization: `Bearer ${token}` } }
+        { headers: { Authorization: "Bearer " + token } }
       );
 
       setMessage(
@@ -399,7 +399,7 @@ const createTeam = async () => {
       const token = localStorage.getItem("access_token");
       const response = await axios.get(
         `${API_URL}/registrations/`,
-        { headers: { Authorization: `Bearer ${token}` } }
+        { headers: { Authorization: "Bearer " + token } }
       );
 
       setRegistrations(response.data);
@@ -419,7 +419,7 @@ const createTeam = async () => {
       await axios.put(
         `${API_URL}/registrations/${registrationId}/approve`,
         {},
-        { headers: { Authorization: `Bearer ${token}` } }
+        { headers: { Authorization: "Bearer " + token } }
       );
 
       setMessage(
@@ -441,7 +441,7 @@ const createTeam = async () => {
       await axios.put(
         `${API_URL}/registrations/${registrationId}/reject`,
         {},
-        { headers: { Authorization: `Bearer ${token}` } }
+        { headers: { Authorization: "Bearer " + token } }
       );
 
       setMessage("Registration rejected successfully");
@@ -502,6 +502,8 @@ const createTeam = async () => {
 
   const openSchedulePage = async () => {
     try {
+      const token = localStorage.getItem("access_token");
+      const config = { headers: { Authorization: "Bearer " + token } };
       const tournamentResponse = await axios.get(
         `${API_URL}/tournaments/`
       );
@@ -515,7 +517,8 @@ const createTeam = async () => {
       setTeams(teamResponse.data);
 
       const registrationResponse = await axios.get(
-        `${API_URL}/registrations/`
+        `${API_URL}/registrations/`,
+        config
       );
 
       setRegistrations(registrationResponse.data);
@@ -551,11 +554,14 @@ const createTeam = async () => {
     }
 
     try {
+      const token = localStorage.getItem("access_token");
       await axios.post(`${API_URL}/matches/`, {
         tournament_id: Number(selectedTournament),
         team1_id: Number(selectedTeam),
         team2_id: Number(selectedTeam2),
         match_date: matchDate,
+      }, {
+        headers: { Authorization: "Bearer " + token },
       });
 
       setMessage(
@@ -617,6 +623,11 @@ const createTeam = async () => {
         {
           winner_id: Number(winnerId),
           result: result,
+        },
+        {
+          headers: {
+            Authorization: "Bearer " + token,
+          },
         }
       );
 
@@ -633,6 +644,10 @@ const createTeam = async () => {
       );
 
       setMatches(response.data);
+      const leaderboardResponse = await axios.get(
+        `${API_URL}/leaderboard/`
+      );
+      setLeaderboard(leaderboardResponse.data);
     } catch (error) {
       setMessage(
         error.response?.data?.detail ||
@@ -679,7 +694,7 @@ const createTeam = async () => {
 
       const config = {
         headers: {
-          Authorization: `Bearer ${token}`,
+          Authorization: `Bearer ${response.data.access_token}`
         },
       };
 
@@ -706,7 +721,7 @@ const createTeam = async () => {
 
       const config = {
         headers: {
-          Authorization: `Bearer ${token}`,
+          Authorization: `Bearer ${response.data.access_token}`
         },
       };
 
@@ -1271,7 +1286,7 @@ const createTeam = async () => {
   // =========================
 
   if (page === "scheduleMatch") {
-    const approvedRegistrations = registrations.filter((registration) => registration.status === "approved");
+    const approvedRegistrations = registrations.filter((registration) => registration.status === "approved" && registration.tournament_id === Number(selectedTournament));
     const approvedTeams = approvedRegistrations.map((registration) => teams.find((team) => team.id === registration.team_id)).filter(Boolean);
 
     return (
@@ -1317,7 +1332,7 @@ const createTeam = async () => {
                 <label className="field-label mt-3">Winner</label>
                 <select className="pro-input" value={winnerId} onChange={(e) => setWinnerId(e.target.value)}>
                   <option value="">Select winner</option>
-                  {teams.filter((team) => team.name === match.team1_name || team.name === match.team2_name).map((team) => <option key={team.id} value={team.id}>{team.name}</option>)}
+                  {teams.filter((team) => team.id === match.team1_id || team.id === match.team2_id).map((team) => <option key={team.id} value={team.id}>{team.name}</option>)}
                 </select>
               </>
             );
@@ -1735,3 +1750,4 @@ const EmptyState = ({ icon, title, text, compact }) => (
 const PasswordRule = ({ ok, text }) => <div className={ok ? "rule-ok" : "rule-bad"}>{ok ? "✓" : "○"} {text}</div>;
 
 export default App;
+

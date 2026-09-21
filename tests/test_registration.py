@@ -308,3 +308,134 @@ def test_invalid_status_transition_is_rejected(registration_client, registration
 
     assert approve.status_code == 200
     assert reject.status_code == 400
+
+
+def approve_registration(client, context, team_key, manager_key):
+    response = create_registration(
+        client,
+        context,
+        user_key=manager_key,
+        team_key=team_key,
+    )
+    registration_id = response.json()["id"]
+    approved = client.put(
+        f"/registrations/{registration_id}/approve",
+        headers=auth_header(context["organizer"]),
+    )
+    assert approved.status_code == 200
+
+
+def schedule_payload(context):
+    return {
+        "tournament_id": context["tournament"].id,
+        "team1_id": context["team"].id,
+        "team2_id": context["other_team"].id,
+        "match_date": "2026-09-22T12:00:00",
+    }
+
+
+def test_organizer_jwt_required_for_scheduling(registration_client, registration_context):
+    client, _ = registration_client
+    response = client.post("/matches/", json=schedule_payload(registration_context))
+    assert response.status_code == 401
+
+
+def test_approved_teams_can_be_scheduled(registration_client, registration_context):
+    client, _ = registration_client
+    context = registration_context
+    approve_registration(client, context, "team", "manager")
+    approve_registration(client, context, "other_team", "other_manager")
+    response = client.post(
+        "/matches/",
+        headers=auth_header(context["organizer"]),
+        json=schedule_payload(context),
+    )
+    assert response.status_code == 200
+
+
+def test_pending_team_cannot_be_scheduled(registration_client, registration_context):
+    client, _ = registration_client
+    context = registration_context
+    approve_registration(client, context, "team", "manager")
+    create_registration(client, context, user_key="other_manager", team_key="other_team")
+    response = client.post(
+        "/matches/",
+        headers=auth_header(context["organizer"]),
+        json=schedule_payload(context),
+    )
+    assert response.status_code == 400
+
+
+def test_same_team_cannot_play_itself(registration_client, registration_context):
+    client, _ = registration_client
+    context = registration_context
+    payload = schedule_payload(context)
+    payload["team2_id"] = payload["team1_id"]
+    response = client.post(
+        "/matches/",
+        headers=auth_header(context["organizer"]),
+        json=payload,
+    )
+    assert response.status_code == 400
+
+
+def test_organizer_jwt_required_for_result_update(registration_client, registration_context):
+    client, _ = registration_client
+    context = registration_context
+    approve_registration(client, context, "team", "manager")
+    approve_registration(client, context, "other_team", "other_manager")
+    scheduled = client.post(
+        "/matches/",
+        headers=auth_header(context["organizer"]),
+        json=schedule_payload(context),
+    )
+    match_id = scheduled.json()["id"]
+    response = client.put(
+        f"/matches/{match_id}/result",
+        json={"winner_id": context["team"].id, "result": "2-1"},
+    )
+    assert response.status_code == 401
+
+
+def test_invalid_winner_is_rejected(registration_client, registration_context):
+    client, _ = registration_client
+    context = registration_context
+    approve_registration(client, context, "team", "manager")
+    approve_registration(client, context, "other_team", "other_manager")
+    scheduled = client.post(
+        "/matches/",
+        headers=auth_header(context["organizer"]),
+        json=schedule_payload(context),
+    )
+    response = client.put(
+        f"/matches/{scheduled.json()['id']}/result",
+        headers=auth_header(context["organizer"]),
+        json={"winner_id": context["organizer"].id, "result": "2-1"},
+    )
+    assert response.status_code == 400
+
+
+def test_valid_result_updates_match_and_leaderboard(registration_client, registration_context):
+    client, _ = registration_client
+    context = registration_context
+    approve_registration(client, context, "team", "manager")
+    approve_registration(client, context, "other_team", "other_manager")
+    scheduled = client.post(
+        "/matches/",
+        headers=auth_header(context["organizer"]),
+        json=schedule_payload(context),
+    )
+    response = client.put(
+        f"/matches/{scheduled.json()['id']}/result",
+        headers=auth_header(context["organizer"]),
+        json={"winner_id": context["team"].id, "result": "2-1"},
+    )
+    assert response.status_code == 200
+    assert response.json()["result"] == "2-1"
+
+    leaderboard = client.get("/leaderboard/")
+    assert leaderboard.status_code == 200
+    rows = {row["team_name"]: row for row in leaderboard.json()}
+    assert rows["Team One"]["points"] == 3
+    assert rows["Team One"]["wins"] == 1
+    assert rows["Team Two"]["losses"] == 1
