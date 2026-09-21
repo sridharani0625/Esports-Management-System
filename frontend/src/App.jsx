@@ -1105,16 +1105,18 @@ const createTeam = async () => {
 
         {selectedMemberTeam && (
           <div className="row g-4">
-            <div className="col-lg-4">
-              <div className="pro-card h-100">
-                <span className="kicker">Add player</span>
-                <h3 className="mt-2">Build the roster</h3>
-                <p className="text-muted-custom">Enter the player ID of an eligible player account.</p>
-                <input type="number" className="pro-input" placeholder="Player ID" value={playerId} onChange={(e) => setPlayerId(e.target.value)} />
-                <button className="pro-btn pro-btn-primary w-100 mt-3" onClick={addTeamMember}>Add player</button>
+            {user.role === "TEAM_MANAGER" && (
+              <div className="col-lg-4">
+                <div className="pro-card h-100">
+                  <span className="kicker">Add player</span>
+                  <h3 className="mt-2">Build the roster</h3>
+                  <p className="text-muted-custom">Enter the player ID of an eligible player account.</p>
+                  <input type="number" className="pro-input" placeholder="Player ID" value={playerId} onChange={(e) => setPlayerId(e.target.value)} />
+                  <button className="pro-btn pro-btn-primary w-100 mt-3" onClick={addTeamMember}>Add player</button>
+                </div>
               </div>
-            </div>
-            <div className="col-lg-8">
+            )}
+            <div className={user.role === "TEAM_MANAGER" ? "col-lg-8" : "col-lg-12"}>
               <div className="pro-card">
                 <div className="d-flex justify-content-between align-items-center mb-3">
                   <div><span className="kicker">Roster</span><h3 className="mt-1 mb-0">Current members</h3></div>
