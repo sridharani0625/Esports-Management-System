@@ -632,6 +632,7 @@ const createTeam = async () => {
     }
 
     try {
+      const token = localStorage.getItem("access_token");
       await axios.put(
         `${API_URL}/matches/${selectedMatch}/result`,
         {
@@ -946,6 +947,24 @@ const createTeam = async () => {
   // =========================
 
   if (page === "dashboard") {
+    const upcomingTournaments = tournaments.filter(
+      (tournament) => String(tournament.status).toLowerCase() === "upcoming"
+    );
+    const managedTeamIds = new Set(
+      teams
+        .filter((team) => String(team.manager_id) === String(user.user_id))
+        .map((team) => String(team.id))
+    );
+    const dashboardMatches =
+      user.role === "TEAM_MANAGER"
+        ? matches.filter(
+            (match) =>
+              String(match.status).toLowerCase() === "upcoming" &&
+              (managedTeamIds.has(String(match.team1_id)) ||
+                managedTeamIds.has(String(match.team2_id)))
+          )
+        : matches;
+
     return (
       <AppLayout user={user} page={page} setPage={setPage} logout={logout}>
         <div className="page-intro">
@@ -969,10 +988,16 @@ const createTeam = async () => {
         </div>
 
         <div className="row g-3 mb-5">
-          <StatCard icon={<Icon.Trophy />} label="Tournaments" value={tournaments.length} hint="Available events" />
-          <StatCard icon={<Icon.Users />} label="Teams" value={teams.length} hint="Registered teams" />
-          <StatCard icon={<Icon.Target />} label="Matches" value={matches.length} hint="Scheduled matches" />
-          <StatCard icon={<Icon.Chart />} label="Leaderboard" value={leaderboard.length} hint="Ranked teams" />
+          <StatCard icon={<Icon.Trophy />} label="Tournaments" value={user.role === "TEAM_MANAGER" ? upcomingTournaments.length : tournaments.length} hint="Available events" />
+          {user.role !== "TEAM_MANAGER" && (
+            <StatCard icon={<Icon.Users />} label="Teams" value={teams.length} hint="Registered teams" />
+          )}
+          {(user.role !== "TEAM_MANAGER" || dashboardMatches.length > 0) && (
+            <StatCard icon={<Icon.Target />} label="Matches" value={dashboardMatches.length} hint="Matches involving your team" />
+          )}
+          {user.role !== "TEAM_MANAGER" && (
+            <StatCard icon={<Icon.Chart />} label="Leaderboard" value={leaderboard.length} hint="Ranked teams" />
+          )}
         </div>
 
         <div className="section-heading">
@@ -1293,7 +1318,7 @@ const createTeam = async () => {
             {matches.map((match) => (
               <div className="col-xl-6" key={match.id}>
                 <div className="pro-card match-card h-100">
-                  <div className="d-flex justify-content-between align-items-center mb-3"><span className="kicker">Match #{match.id}</span><StatusBadge status={match.winner_name ? "completed" : "scheduled"} /></div>
+                  <div className="d-flex justify-content-between align-items-center mb-3"><span className="kicker">Match #{match.id}</span><StatusBadge status={match.status || (match.winner_name ? "completed" : "upcoming")} /></div>
                   <div className="match-teams"><div><div className="team-dot">{match.team1_name?.charAt(0)}</div><strong>{match.team1_name}</strong></div><span className="vs">vs</span><div><div className="team-dot">{match.team2_name?.charAt(0)}</div><strong>{match.team2_name}</strong></div></div>
                   <div className="match-meta"><span><Icon.Trophy small /> {match.tournament_name}</span><span><Icon.Calendar small /> {match.match_date}</span></div>
                   <div className="result-strip"><span>Result</span><strong>{match.result || "Not completed"}</strong>{match.winner_name && <span>Winner: {match.winner_name}</span>}</div>
@@ -1311,8 +1336,21 @@ const createTeam = async () => {
   // =========================
 
   if (page === "scheduleMatch") {
-    const approvedRegistrations = registrations.filter((registration) => registration.status === "approved" && registration.tournament_id === Number(selectedTournament));
-    const approvedTeams = approvedRegistrations.map((registration) => teams.find((team) => team.id === registration.team_id)).filter(Boolean);
+    const approvedRegistrations = registrations.filter(
+      (registration) =>
+        registration.status === "approved" &&
+        String(registration.tournament_id) === String(selectedTournament)
+    );
+    const approvedTeams = approvedRegistrations
+      .map((registration) =>
+        teams.find(
+          (team) => String(team.id) === String(registration.team_id)
+        )
+      )
+      .filter(Boolean);
+    const team2Options = approvedTeams.filter(
+      (team) => String(team.id) !== String(selectedTeam)
+    );
 
     return (
       <AppLayout user={user} page={page} setPage={setPage} logout={logout}>
@@ -1320,9 +1358,9 @@ const createTeam = async () => {
         <div className="form-panel">
           <div className="form-panel-icon"><Icon.Calendar /></div>
           <div className="row g-4">
-            <div className="col-12"><label className="field-label">Tournament</label><select className="pro-input" value={selectedTournament} onChange={(e) => setSelectedTournament(e.target.value)}><option value="">Select tournament</option>{tournaments.map((tournament) => <option key={tournament.id} value={tournament.id}>{tournament.name}</option>)}</select></div>
-            <div className="col-md-6"><label className="field-label">Team 1</label><select className="pro-input" value={selectedTeam} onChange={(e) => setSelectedTeam(e.target.value)}><option value="">Select team</option>{approvedTeams.map((team) => <option key={team.id} value={team.id}>{team.name}</option>)}</select></div>
-            <div className="col-md-6"><label className="field-label">Team 2</label><select className="pro-input" value={selectedTeam2} onChange={(e) => setSelectedTeam2(e.target.value)}><option value="">Select team</option>{approvedTeams.map((team) => <option key={team.id} value={team.id}>{team.name}</option>)}</select></div>
+            <div className="col-12"><label className="field-label">Tournament</label><select className="pro-input" value={selectedTournament} onChange={(e) => { setSelectedTournament(e.target.value); setSelectedTeam(""); setSelectedTeam2(""); }}><option value="">Select tournament</option>{tournaments.map((tournament) => <option key={tournament.id} value={tournament.id}>{tournament.name}</option>)}</select></div>
+            <div className="col-md-6"><label className="field-label">Team 1</label><select className="pro-input" value={selectedTeam} onChange={(e) => { setSelectedTeam(e.target.value); setSelectedTeam2(""); }}><option value="">Select team</option>{approvedTeams.map((team) => <option key={team.id} value={team.id}>{team.name}</option>)}</select></div>
+            <div className="col-md-6"><label className="field-label">Team 2</label><select className="pro-input" value={selectedTeam2} onChange={(e) => setSelectedTeam2(e.target.value)} disabled={!selectedTeam}><option value="">Select a different team</option>{team2Options.map((team) => <option key={team.id} value={team.id}>{team.name}</option>)}</select></div>
             <div className="col-md-6"><label className="field-label">Match date and time</label><input type="datetime-local" className="pro-input" value={matchDate} onChange={(e) => setMatchDate(e.target.value)} /></div>
           </div>
           <div className="info-callout mt-4">Only approved tournament registrations are available for scheduling.</div>
@@ -1756,7 +1794,7 @@ const RoleBadge = ({ role }) => <span className="role-badge">{role}</span>;
 
 const StatusBadge = ({ status }) => {
   const value = String(status || "unknown").toLowerCase();
-  const cls = ["pending","approved","completed","upcoming","scheduled"].includes(value) ? value : "default";
+  const cls = ["pending","approved","completed","upcoming","running","scheduled"].includes(value) ? value : "default";
   return <span className={`status-badge ${cls}`}>{value}</span>;
 };
 
