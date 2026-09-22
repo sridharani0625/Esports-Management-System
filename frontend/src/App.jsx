@@ -1041,15 +1041,23 @@ const createTeam = async () => {
   // =========================
 
   if (page === "tournaments") {
+    const visibleTournaments =
+      user.role === "TEAM_MANAGER"
+        ? tournaments.filter(
+            (tournament) =>
+              String(tournament.status).toLowerCase() === "upcoming"
+          )
+        : tournaments;
+
     return (
       <AppLayout user={user} page={page} setPage={setPage} logout={logout}>
         <PageHeader eyebrow="Competitions" title="Tournaments" subtitle="Discover and monitor esports competitions." />
         {message && <MessageBanner message={message} />}
-        {tournaments.length === 0 ? (
+        {visibleTournaments.length === 0 ? (
           <EmptyState icon={<Icon.Trophy />} title="No tournaments found" text="Create a tournament to get your competition started." />
         ) : (
           <div className="row g-4">
-            {tournaments.map((tournament) => (
+            {visibleTournaments.map((tournament) => (
               <div className="col-xl-4 col-md-6" key={tournament.id}>
                 <div className="pro-card tournament-card h-100">
                   <div className="card-topline">
@@ -1307,15 +1315,27 @@ const createTeam = async () => {
   // =========================
 
   if (page === "matches") {
+    const visibleMatches =
+      user.role === "TEAM_MANAGER"
+        ? matches.filter((match) =>
+            teams.some(
+              (team) =>
+                String(team.manager_id) === String(user.user_id) &&
+                (String(team.id) === String(match.team1_id) ||
+                  String(team.id) === String(match.team2_id))
+            )
+          )
+        : matches;
+
     return (
       <AppLayout user={user} page={page} setPage={setPage} logout={logout}>
         <PageHeader eyebrow="Match center" title="Matches" subtitle="Track upcoming fixtures and completed results." />
         {message && <MessageBanner message={message} />}
-        {matches.length === 0 ? (
+        {visibleMatches.length === 0 ? (
           <EmptyState icon={<Icon.Target />} title="No matches found" text="Scheduled matches will appear here." />
         ) : (
           <div className="row g-4">
-            {matches.map((match) => (
+            {visibleMatches.map((match) => (
               <div className="col-xl-6" key={match.id}>
                 <div className="pro-card match-card h-100">
                   <div className="d-flex justify-content-between align-items-center mb-3"><span className="kicker">Match #{match.id}</span><StatusBadge status={match.status || (match.winner_name ? "completed" : "upcoming")} /></div>
