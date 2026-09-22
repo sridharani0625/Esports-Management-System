@@ -85,17 +85,9 @@ def signup(
     db: Session = Depends(get_db)
 ):
 
-    # ADMIN cannot be created through public signup
-    if user.role == "ADMIN":
-        raise HTTPException(
-            status_code=403,
-            detail="Admin accounts cannot be created through signup"
-        )
-
     # Only these roles are allowed through signup
     allowed_roles = [
         "PLAYER",
-        "TEAM_MANAGER",
         "ORGANIZER"
     ]
 
@@ -207,6 +199,12 @@ def login(
         raise HTTPException(
             status_code=400,
             detail="Invalid email or password"
+        )
+
+    if db_user.role not in {"PLAYER", "ORGANIZER"}:
+        raise HTTPException(
+            status_code=403,
+            detail="This account role is no longer supported"
         )
 
     token_data = {
