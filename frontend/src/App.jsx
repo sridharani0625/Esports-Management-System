@@ -15,6 +15,7 @@ function App() {
   const [role, setRole] = useState("PLAYER");
 
   const [user, setUser] = useState(null);
+  const [isLoggingIn, setIsLoggingIn] = useState(false);
 
   const [tournaments, setTournaments] = useState([]);
   const [teams, setTeams] = useState([]);
@@ -126,6 +127,12 @@ useEffect(() => {
   // LOGIN
   // =========================
 const login = async () => {
+  if (isLoggingIn) {
+    return;
+  }
+
+  const startTime = Date.now();
+  setIsLoggingIn(true);
   try {
     const response = await axios.post(`${API_URL}/users/login`, {
       email: email,
@@ -156,6 +163,13 @@ const login = async () => {
     setMessage(
       error.response?.data?.detail || "Login failed"
     );
+  } finally {
+    const elapsed = Date.now() - startTime;
+    const remaining = Math.max(0, 500 - elapsed);
+    if (remaining > 0) {
+      await new Promise((resolve) => setTimeout(resolve, remaining));
+    }
+    setIsLoggingIn(false);
   }
 };
   // =========================
@@ -791,8 +805,19 @@ const createTeam = async () => {
             </button>
           </div>
 
-          <button className="pro-btn pro-btn-primary w-100 mt-2" onClick={login}>
-            Sign in
+          <button
+            className="pro-btn pro-btn-primary w-100 mt-2"
+            onClick={login}
+            disabled={isLoggingIn}
+          >
+            {isLoggingIn ? (
+              <>
+                <span className="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                Signing In...
+              </>
+            ) : (
+              "Sign In"
+            )}
           </button>
 
           <div className="auth-divider"><span>New here?</span></div>
@@ -1750,5 +1775,3 @@ const EmptyState = ({ icon, title, text, compact }) => (
 const PasswordRule = ({ ok, text }) => <div className={ok ? "rule-ok" : "rule-bad"}>{ok ? "✓" : "○"} {text}</div>;
 
 export default App;
-
-
