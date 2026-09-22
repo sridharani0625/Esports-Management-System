@@ -279,7 +279,7 @@ const createTeam = async () => {
 
     const config = {
         headers: {
-          Authorization: `Bearer ${response.data.access_token}`
+          Authorization: "Bearer " + token
         },
       };
 
@@ -694,7 +694,7 @@ const createTeam = async () => {
 
       const config = {
         headers: {
-          Authorization: `Bearer ${response.data.access_token}`
+          Authorization: "Bearer " + token
         },
       };
 
@@ -721,7 +721,7 @@ const createTeam = async () => {
 
       const config = {
         headers: {
-          Authorization: `Bearer ${response.data.access_token}`
+          Authorization: "Bearer " + token
         },
       };
 
@@ -1750,4 +1750,5 @@ const EmptyState = ({ icon, title, text, compact }) => (
 const PasswordRule = ({ ok, text }) => <div className={ok ? "rule-ok" : "rule-bad"}>{ok ? "✓" : "○"} {text}</div>;
 
 export default App;
+
 
