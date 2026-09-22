@@ -15,13 +15,17 @@ def get_leaderboard(db: Session = Depends(get_db)):
     query = text("""
         select
             l.rank,
-            t.name as team_name,
+            coalesce(t.name, u.username) as team_name,
+            l.player_id,
+            l.team_id,
             l.points,
             l.wins,
             l.losses
         from leaderboard l
-        join teams t
+        left join teams t
             on l.team_id = t.id
+        left join users u
+            on l.player_id = u.id
         order by l.rank;
     """)
 

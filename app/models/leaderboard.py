@@ -9,7 +9,8 @@ class Leaderboard(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     tournament_id = Column(Integer, ForeignKey("tournaments.id"), nullable=False, index=True)
-    team_id = Column(Integer, ForeignKey("teams.id"), nullable=False, index=True)
+    team_id = Column(Integer, ForeignKey("teams.id"), nullable=True, index=True)
+    player_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
     rank = Column(Integer, nullable=False)
     points = Column(Integer, nullable=False, default=0, server_default="0")
     wins = Column(Integer, nullable=False, default=0, server_default="0")
@@ -19,6 +20,7 @@ class Leaderboard(Base):
 
     __table_args__ = (
         UniqueConstraint("tournament_id", "team_id", name="uq_leaderboard_tournament_team"),
+        UniqueConstraint("tournament_id", "player_id", name="uq_leaderboard_tournament_player"),
         CheckConstraint("rank > 0", name="ck_leaderboard_rank_positive"),
         CheckConstraint("points >= 0", name="ck_leaderboard_points_nonnegative"),
         CheckConstraint("wins >= 0", name="ck_leaderboard_wins_nonnegative"),

@@ -16,14 +16,67 @@ router = APIRouter(
 
 class MatchCreate(BaseModel):
     tournament_id: int
-    team1_id: int
-    team2_id: int
+    team1_id: int | None = None
+    team2_id: int | None = None
+    player1_id: int | None = None
+    player2_id: int | None = None
     match_date: datetime
 
 
 class MatchResult(BaseModel):
     winner_id: int
     result: str
+
+
+def update_player_leaderboard(
+    db: Session, tournament_id: int, winner_id: int, loser_id: int
+) -> None:
+    for player_id in (winner_id, loser_id):
+        row = db.execute(
+            text("""
+                select id from leaderboard
+                where tournament_id = :tournament_id and player_id = :player_id
+            """),
+            {"tournament_id": tournament_id, "player_id": player_id},
+        ).first()
+        if row is None:
+            db.execute(
+                text("""
+                    insert into leaderboard (
+                        tournament_id, player_id, team_id, rank, points, wins, losses
+                    )
+                    values (:tournament_id, :player_id, null, 1, 0, 0, 0)
+                """),
+                {"tournament_id": tournament_id, "player_id": player_id},
+            )
+
+    db.execute(
+        text("""
+            update leaderboard set wins = wins + 1, points = points + 3
+            where tournament_id = :tournament_id and player_id = :winner_id
+        """),
+        {"tournament_id": tournament_id, "winner_id": winner_id},
+    )
+    db.execute(
+        text("""
+            update leaderboard set losses = losses + 1
+            where tournament_id = :tournament_id and player_id = :loser_id
+        """),
+        {"tournament_id": tournament_id, "loser_id": loser_id},
+    )
+    rows = db.execute(
+        text("""
+            select id from leaderboard
+            where tournament_id = :tournament_id
+            order by points desc, wins desc, id
+        """),
+        {"tournament_id": tournament_id},
+    ).fetchall()
+    for rank, row in enumerate(rows, start=1):
+        db.execute(
+            text("update leaderboard set rank = :rank where id = :id"),
+            {"rank": rank, "id": row.id},
+        )
 
 
 def update_leaderboard(db: Session, tournament_id: int, winner_id: int, loser_id: int) -> None:
@@ -101,22 +154,33 @@ def get_matches(
             m.id,
             m.team1_id,
             m.team2_id,
+            m.player1_id,
+            m.player2_id,
             t.name as tournament_name,
             t.game,
             team1.name as team1_name,
             team2.name as team2_name,
+            player1.username as player1_name,
+            player2.username as player2_name,
             m.match_date,
             m.result,
-            winner.name as winner_name
+            winner.name as winner_name,
+            winner_player.username as winner_player_name
         from matches m
         join tournaments t
             on m.tournament_id = t.id
-        join teams team1
+        left join teams team1
             on m.team1_id = team1.id
-        join teams team2
+        left join teams team2
             on m.team2_id = team2.id
         left join teams winner
             on m.winner_id = winner.id
+        left join users player1
+            on m.player1_id = player1.id
+        left join users player2
+            on m.player2_id = player2.id
+        left join users winner_player
+            on m.winner_player_id = winner_player.id
         order by m.match_date;
     """)
 
@@ -154,11 +218,18 @@ def schedule_match(
     db: Session = Depends(get_db),
     organizer=Depends(organizer_required),
 ):
-    if match.team1_id == match.team2_id:
+    player_flow = match.player1_id is not None or match.player2_id is not None
+    if player_flow and (match.player1_id is None or match.player2_id is None):
+        raise HTTPException(status_code=400, detail="Both players are required")
+    if not player_flow and (match.team1_id is None or match.team2_id is None):
+        raise HTTPException(status_code=400, detail="Both teams are required")
+    if player_flow and match.player1_id == match.player2_id:
         raise HTTPException(
             status_code=400,
-            detail="A team cannot play against itself",
+            detail="A player cannot play against themselves",
         )
+    if not player_flow and match.team1_id == match.team2_id:
+        raise HTTPException(status_code=400, detail="A team cannot play against itself")
 
     tournament = db.execute(
         text("""
@@ -178,48 +249,69 @@ def schedule_match(
             detail="You can only schedule matches for your own tournaments",
         )
 
-    teams = db.execute(
-        text("""
-            select id
-            from teams
-            where id in (:team1_id, :team2_id)
-        """),
-        {"team1_id": match.team1_id, "team2_id": match.team2_id},
-    ).fetchall()
-    if len(teams) != 2:
-        raise HTTPException(status_code=404, detail="One or both teams were not found")
-
-    approved_count = db.execute(
-        text("""
-            select count(*) as count
-            from registrations
-            where tournament_id = :tournament_id
-              and team_id in (:team1_id, :team2_id)
-              and status = 'approved'
-        """),
-        {
-            "tournament_id": match.tournament_id,
-            "team1_id": match.team1_id,
-            "team2_id": match.team2_id,
-        },
-    ).scalar()
-    if approved_count != 2:
-        raise HTTPException(
-            status_code=400,
-            detail="Both teams must have approved registrations for this tournament",
-        )
+    if player_flow:
+        players = db.execute(
+            text("""
+                select id from users
+                where id in (:player1_id, :player2_id) and role = 'PLAYER'
+            """),
+            {"player1_id": match.player1_id, "player2_id": match.player2_id},
+        ).fetchall()
+        if len(players) != 2:
+            raise HTTPException(status_code=404, detail="One or both players were not found")
+        approved_count = db.execute(
+            text("""
+                select count(*) from player_registrations
+                where tournament_id = :tournament_id
+                  and player_id in (:player1_id, :player2_id)
+                  and status = 'approved'
+            """),
+            {
+                "tournament_id": match.tournament_id,
+                "player1_id": match.player1_id,
+                "player2_id": match.player2_id,
+            },
+        ).scalar()
+        if approved_count != 2:
+            raise HTTPException(status_code=400, detail="Both players must have approved applications")
+    else:
+        teams = db.execute(
+            text("select id from teams where id in (:team1_id, :team2_id)"),
+            {"team1_id": match.team1_id, "team2_id": match.team2_id},
+        ).fetchall()
+        if len(teams) != 2:
+            raise HTTPException(status_code=404, detail="One or both teams were not found")
+        approved_count = db.execute(
+            text("""
+                select count(*) from registrations
+                where tournament_id = :tournament_id
+                  and team_id in (:team1_id, :team2_id)
+                  and status = 'approved'
+            """),
+            {
+                "tournament_id": match.tournament_id,
+                "team1_id": match.team1_id,
+                "team2_id": match.team2_id,
+            },
+        ).scalar()
+        if approved_count != 2:
+            raise HTTPException(status_code=400, detail="Both teams must have approved registrations for this tournament")
 
     query = text("""
         insert into matches (
             tournament_id,
             team1_id,
             team2_id,
+            player1_id,
+            player2_id,
             match_date
         )
         values (
             :tournament_id,
             :team1_id,
             :team2_id,
+            :player1_id,
+            :player2_id,
             :match_date
         )
         returning
@@ -227,6 +319,8 @@ def schedule_match(
             tournament_id,
             team1_id,
             team2_id,
+            player1_id,
+            player2_id,
             match_date;
     """)
 
@@ -236,6 +330,8 @@ def schedule_match(
             "tournament_id": match.tournament_id,
             "team1_id": match.team1_id,
             "team2_id": match.team2_id,
+            "player1_id": match.player1_id,
+            "player2_id": match.player2_id,
             "match_date": match.match_date
         }
     )
@@ -268,7 +364,9 @@ def enter_match_result(
             id,
             tournament_id,
             team1_id,
-            team2_id
+            team2_id,
+            player1_id,
+            player2_id
         from matches
         where id = :match_id
           and tournament_id in (
@@ -289,14 +387,11 @@ def enter_match_result(
     if not match:
         raise HTTPException(status_code=404, detail="Match not found")
 
-    # Check winner is one of the two teams
-    if match_result.winner_id not in [
-        match.team1_id,
-        match.team2_id
-    ]:
+    participants = [match.player1_id, match.player2_id] if match.player1_id else [match.team1_id, match.team2_id]
+    if match_result.winner_id not in participants:
         raise HTTPException(
             status_code=400,
-            detail="Winner must be one of the teams in this match",
+            detail="Winner must be one of the participants in this match",
         )
 
     if re.fullmatch(r"\d+-\d+", match_result.result.strip()) is None:
@@ -317,7 +412,10 @@ def enter_match_result(
             tournament_id,
             team1_id,
             team2_id,
+            player1_id,
+            player2_id,
             winner_id,
+            winner_player_id,
             result;
     """)
 
@@ -325,24 +423,20 @@ def enter_match_result(
         update_query,
         {
             "match_id": match_id,
-            "winner_id": match_result.winner_id,
+            "winner_id": None if match.player1_id else match_result.winner_id,
+            "winner_player_id": match_result.winner_id if match.player1_id else None,
             "result": match_result.result
         }
     )
 
     row = result.fetchone()
     result.close()
-    loser_id = (
-        match.team2_id
-        if match_result.winner_id == match.team1_id
-        else match.team1_id
-    )
-    update_leaderboard(
-        db,
-        match.tournament_id,
-        match_result.winner_id,
-        loser_id,
-    )
+    if match.player1_id:
+        loser_id = match.player2_id if match_result.winner_id == match.player1_id else match.player1_id
+        update_player_leaderboard(db, match.tournament_id, match_result.winner_id, loser_id)
+    else:
+        loser_id = match.team2_id if match_result.winner_id == match.team1_id else match.team1_id
+        update_leaderboard(db, match.tournament_id, match_result.winner_id, loser_id)
     db.commit()
 
     return {

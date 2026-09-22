@@ -26,6 +26,8 @@ function App() {
   const [selectedTournament, setSelectedTournament] = useState("");
   const [selectedTeam, setSelectedTeam] = useState("");
   const [selectedTeam2, setSelectedTeam2] = useState("");
+  const [selectedPlayer, setSelectedPlayer] = useState("");
+  const [selectedPlayer2, setSelectedPlayer2] = useState("");
   const [matchDate, setMatchDate] = useState("");
 
   const [selectedMatch, setSelectedMatch] = useState("");
@@ -404,6 +406,44 @@ const createTeam = async () => {
     }
   };
 
+  const openPlayerApplications = async () => {
+    try {
+      const token = localStorage.getItem("access_token");
+      const [tournamentResponse, applicationResponse] = await Promise.all([
+        axios.get(`${API_URL}/tournaments/`),
+        axios.get(`${API_URL}/applications/`, {
+          headers: { Authorization: "Bearer " + token },
+        }),
+      ]);
+      setTournaments(tournamentResponse.data);
+      setRegistrations(applicationResponse.data);
+      setPage("playerApplications");
+      setMessage("");
+    } catch (error) {
+      setMessage(error.response?.data?.detail || "Could not load applications");
+    }
+  };
+
+  const applyToTournament = async () => {
+    if (!selectedTournament) {
+      setMessage("Please select a tournament");
+      return;
+    }
+    try {
+      const token = localStorage.getItem("access_token");
+      await axios.post(
+        `${API_URL}/applications/`,
+        { tournament_id: Number(selectedTournament) },
+        { headers: { Authorization: "Bearer " + token } }
+      );
+      setMessage("Application submitted successfully");
+      setSelectedTournament("");
+      await openPlayerApplications();
+    } catch (error) {
+      setMessage(error.response?.data?.detail || "Could not submit application");
+    }
+  };
+
   // =========================
   // MANAGE REGISTRATIONS
   // =========================
@@ -468,6 +508,35 @@ const createTeam = async () => {
     }
   };
 
+  const changeApplicationStatus = async (applicationId, status) => {
+    try {
+      const token = localStorage.getItem("access_token");
+      await axios.put(
+        `${API_URL}/applications/${applicationId}/${status}`,
+        {},
+        { headers: { Authorization: "Bearer " + token } }
+      );
+      setMessage(`Application ${status} successfully`);
+      await openManageApplications();
+    } catch (error) {
+      setMessage(error.response?.data?.detail || `Could not ${status} application`);
+    }
+  };
+
+  const openManageApplications = async () => {
+    try {
+      const token = localStorage.getItem("access_token");
+      const response = await axios.get(`${API_URL}/applications/`, {
+        headers: { Authorization: "Bearer " + token },
+      });
+      setRegistrations(response.data);
+      setPage("applications");
+      setMessage("");
+    } catch (error) {
+      setMessage(error.response?.data?.detail || "Could not load applications");
+    }
+  };
+
   // =========================
   // MATCHES
   // =========================
@@ -524,18 +593,12 @@ const createTeam = async () => {
 
       setTournaments(tournamentResponse.data);
 
-      const teamResponse = await axios.get(
-        `${API_URL}/teams/`
-      );
-
-      setTeams(teamResponse.data);
-
-      const registrationResponse = await axios.get(
-        `${API_URL}/registrations/`,
+      const applicationResponse = await axios.get(
+        `${API_URL}/applications/`,
         config
       );
 
-      setRegistrations(registrationResponse.data);
+      setRegistrations(applicationResponse.data);
 
       setPage("scheduleMatch");
       setMessage("");
@@ -550,19 +613,19 @@ const createTeam = async () => {
   const scheduleMatch = async () => {
     if (
       !selectedTournament ||
-      !selectedTeam ||
-      !selectedTeam2 ||
+      !selectedPlayer ||
+      !selectedPlayer2 ||
       !matchDate
     ) {
       setMessage(
-        "Please select tournament, both teams and match date"
+        "Please select tournament, both players and match date"
       );
       return;
     }
 
-    if (selectedTeam === selectedTeam2) {
+    if (selectedPlayer === selectedPlayer2) {
       setMessage(
-        "A team cannot play against itself"
+        "A player cannot play against themselves"
       );
       return;
     }
@@ -571,8 +634,8 @@ const createTeam = async () => {
       const token = localStorage.getItem("access_token");
       await axios.post(`${API_URL}/matches/`, {
         tournament_id: Number(selectedTournament),
-        team1_id: Number(selectedTeam),
-        team2_id: Number(selectedTeam2),
+        player1_id: Number(selectedPlayer),
+        player2_id: Number(selectedPlayer2),
         match_date: matchDate,
       }, {
         headers: { Authorization: "Bearer " + token },
@@ -585,6 +648,8 @@ const createTeam = async () => {
       setSelectedTournament("");
       setSelectedTeam("");
       setSelectedTeam2("");
+      setSelectedPlayer("");
+      setSelectedPlayer2("");
       setMatchDate("");
 
       openMatches();
@@ -917,7 +982,6 @@ const createTeam = async () => {
           <label className="field-label mt-3">Account role</label>
           <select className="pro-input" value={role} onChange={(e) => setRole(e.target.value)}>
             <option value="PLAYER">Player</option>
-            <option value="TEAM_MANAGER">Team manager</option>
             <option value="ORGANIZER">Organizer</option>
           </select>
 
@@ -989,9 +1053,6 @@ const createTeam = async () => {
 
         <div className="row g-3 mb-5">
           <StatCard icon={<Icon.Trophy />} label="Tournaments" value={user.role === "TEAM_MANAGER" ? upcomingTournaments.length : tournaments.length} hint="Available events" />
-          {user.role !== "TEAM_MANAGER" && (
-            <StatCard icon={<Icon.Users />} label="Teams" value={teams.length} hint="Registered teams" />
-          )}
           {(user.role !== "TEAM_MANAGER" || dashboardMatches.length > 0) && (
             <StatCard icon={<Icon.Target />} label="Matches" value={dashboardMatches.length} hint="Matches involving your team" />
           )}
@@ -1009,21 +1070,15 @@ const createTeam = async () => {
 
         <div className="row g-3">
           <ActionCard icon={<Icon.Trophy />} title="Tournaments" text="Browse available esports tournaments." onClick={openTournaments} />
-          <ActionCard icon={<Icon.Users />} title="Teams" text="View registered teams and managers." onClick={openTeams} />
           <ActionCard icon={<Icon.Target />} title="Matches" text="Track scheduled and completed matches." onClick={openMatches} />
           <ActionCard icon={<Icon.Chart />} title="Leaderboard" text="Check rankings, points, wins and losses." onClick={openLeaderboard} />
-          <ActionCard icon={<Icon.Person />} title="Team members" text="View players belonging to each team." onClick={openTeamMembers} />
-
-          {user.role === "TEAM_MANAGER" && (
-            <ActionCard icon={<Icon.Clipboard />} title="Register team" text="Register your team for a tournament." onClick={openRegisterPage} accent />
-          )}
-          {user.role === "TEAM_MANAGER" && (
-            <ActionCard icon={<Icon.Plus />} title="Create my team" text="Create and manage your esports team." onClick={() => setPage("createTeam")} accent />
+          {user.role === "PLAYER" && (
+            <ActionCard icon={<Icon.Clipboard />} title="Apply to play" text="Apply for tournaments and track approval status." onClick={openPlayerApplications} accent />
           )}
           {user.role === "ORGANIZER" && (
             <>
               <ActionCard icon={<Icon.Plus />} title="Create tournament" text="Launch a new esports event." onClick={() => setPage("createTournament")} accent />
-              <ActionCard icon={<Icon.Clipboard />} title="Registrations" text="Review and approve team registrations." onClick={openManageRegistrations} />
+              <ActionCard icon={<Icon.Clipboard />} title="Applications" text="Approve players for your tournaments." onClick={openManageApplications} />
               <ActionCard icon={<Icon.Calendar />} title="Schedule match" text="Schedule matches between approved teams." onClick={openSchedulePage} />
               <ActionCard icon={<Icon.Medal />} title="Match result" text="Record completed match outcomes." onClick={openResultPage} />
             </>
@@ -1212,6 +1267,47 @@ const createTeam = async () => {
     );
   }
 
+  if (page === "playerApplications") {
+    const upcomingTournaments = tournaments.filter(
+      (tournament) => String(tournament.status).toLowerCase() === "upcoming"
+    );
+    return (
+      <AppLayout user={user} page={page} setPage={setPage} logout={logout}>
+        <PageHeader eyebrow="Player workspace" title="Apply to play" subtitle="Choose an upcoming tournament and send your application to its organizer." />
+        <div className="form-panel narrow-panel">
+          <div className="form-panel-icon"><Icon.Trophy /></div>
+          <label className="field-label">Upcoming tournament</label>
+          <select className="pro-input" value={selectedTournament} onChange={(e) => setSelectedTournament(e.target.value)}>
+            <option value="">Select tournament</option>
+            {upcomingTournaments.map((tournament) => (
+              <option key={tournament.id} value={tournament.id}>{tournament.name} · {tournament.game}</option>
+            ))}
+          </select>
+          <button className="pro-btn pro-btn-primary w-100 mt-4" onClick={applyToTournament}>Submit application</button>
+          <div className="info-callout mt-3">Your application must be approved by the tournament organizer before you can play.</div>
+          {registrations.length > 0 && (
+            <div className="mt-4">
+              <span className="kicker">My applications</span>
+              <div className="table-wrap mt-2">
+                <table className="pro-table">
+                  <thead><tr><th>Tournament</th><th>Game</th><th>Status</th></tr></thead>
+                  <tbody>{registrations.map((application) => (
+                    <tr key={application.id}>
+                      <td><strong>{application.tournament_name}</strong></td>
+                      <td>{application.game}</td>
+                      <td><StatusBadge status={application.status} /></td>
+                    </tr>
+                  ))}</tbody>
+                </table>
+              </div>
+            </div>
+          )}
+          {message && <MessageBanner message={message} />}
+        </div>
+      </AppLayout>
+    );
+  }
+
   // =========================
   // TEAM MEMBERS
   // =========================
@@ -1269,6 +1365,40 @@ const createTeam = async () => {
   // =========================
   // REGISTRATIONS
   // =========================
+
+  if (page === "applications") {
+    return (
+      <AppLayout user={user} page={page} setPage={setPage} logout={logout}>
+        <PageHeader eyebrow="Organizer workspace" title="Player applications" subtitle="Approve players for tournaments you organize." />
+        {message && <MessageBanner message={message} />}
+        {registrations.length === 0 ? (
+          <EmptyState icon={<Icon.Clipboard />} title="No applications found" text="Player applications will appear here." />
+        ) : (
+          <div className="pro-card">
+            <div className="table-wrap">
+              <table className="pro-table">
+                <thead><tr><th>Tournament</th><th>Player</th><th>Email</th><th>Status</th><th>Action</th></tr></thead>
+                <tbody>{registrations.map((application) => (
+                  <tr key={application.id}>
+                    <td><strong>{application.tournament_name}</strong><div className="text-muted-custom">{application.game}</div></td>
+                    <td>{application.player_username}</td>
+                    <td>{application.player_email}</td>
+                    <td><StatusBadge status={application.status} /></td>
+                    <td>{application.status === "pending" ? (
+                      <div className="d-flex gap-2">
+                        <button className="small-action approve" onClick={() => changeApplicationStatus(application.id, "approve")}>Approve</button>
+                        <button className="small-action reject" onClick={() => changeApplicationStatus(application.id, "reject")}>Reject</button>
+                      </div>
+                    ) : <span className="text-muted-custom">Completed</span>}</td>
+                  </tr>
+                ))}</tbody>
+              </table>
+            </div>
+          </div>
+        )}
+      </AppLayout>
+    );
+  }
 
   if (page === "registrations") {
     return (
@@ -1339,9 +1469,9 @@ const createTeam = async () => {
               <div className="col-xl-6" key={match.id}>
                 <div className="pro-card match-card h-100">
                   <div className="d-flex justify-content-between align-items-center mb-3"><span className="kicker">Match #{match.id}</span><StatusBadge status={match.status || (match.winner_name ? "completed" : "upcoming")} /></div>
-                  <div className="match-teams"><div><div className="team-dot">{match.team1_name?.charAt(0)}</div><strong>{match.team1_name}</strong></div><span className="vs">vs</span><div><div className="team-dot">{match.team2_name?.charAt(0)}</div><strong>{match.team2_name}</strong></div></div>
+                  <div className="match-teams"><div><div className="team-dot">{(match.player1_name || match.team1_name)?.charAt(0)}</div><strong>{match.player1_name || match.team1_name}</strong></div><span className="vs">vs</span><div><div className="team-dot">{(match.player2_name || match.team2_name)?.charAt(0)}</div><strong>{match.player2_name || match.team2_name}</strong></div></div>
                   <div className="match-meta"><span><Icon.Trophy small /> {match.tournament_name}</span><span><Icon.Calendar small /> {match.match_date}</span></div>
-                  <div className="result-strip"><span>Result</span><strong>{match.result || "Not completed"}</strong>{match.winner_name && <span>Winner: {match.winner_name}</span>}</div>
+                  <div className="result-strip"><span>Result</span><strong>{match.result || "Not completed"}</strong>{(match.winner_name || match.winner_player_name) && <span>Winner: {match.winner_name || match.winner_player_name}</span>}</div>
                 </div>
               </div>
             ))}
@@ -1356,34 +1486,27 @@ const createTeam = async () => {
   // =========================
 
   if (page === "scheduleMatch") {
-    const approvedRegistrations = registrations.filter(
+    const approvedApplications = registrations.filter(
       (registration) =>
         registration.status === "approved" &&
         String(registration.tournament_id) === String(selectedTournament)
     );
-    const approvedTeams = approvedRegistrations
-      .map((registration) =>
-        teams.find(
-          (team) => String(team.id) === String(registration.team_id)
-        )
-      )
-      .filter(Boolean);
-    const team2Options = approvedTeams.filter(
-      (team) => String(team.id) !== String(selectedTeam)
+    const player2Options = approvedApplications.filter(
+      (application) => String(application.player_id) !== String(selectedPlayer)
     );
 
     return (
       <AppLayout user={user} page={page} setPage={setPage} logout={logout}>
-        <PageHeader eyebrow="Organizer workspace" title="Schedule match" subtitle="Create a fixture between approved tournament teams." />
+        <PageHeader eyebrow="Organizer workspace" title="Schedule match" subtitle="Create a fixture between approved tournament players." />
         <div className="form-panel">
           <div className="form-panel-icon"><Icon.Calendar /></div>
           <div className="row g-4">
-            <div className="col-12"><label className="field-label">Tournament</label><select className="pro-input" value={selectedTournament} onChange={(e) => { setSelectedTournament(e.target.value); setSelectedTeam(""); setSelectedTeam2(""); }}><option value="">Select tournament</option>{tournaments.map((tournament) => <option key={tournament.id} value={tournament.id}>{tournament.name}</option>)}</select></div>
-            <div className="col-md-6"><label className="field-label">Team 1</label><select className="pro-input" value={selectedTeam} onChange={(e) => { setSelectedTeam(e.target.value); setSelectedTeam2(""); }}><option value="">Select team</option>{approvedTeams.map((team) => <option key={team.id} value={team.id}>{team.name}</option>)}</select></div>
-            <div className="col-md-6"><label className="field-label">Team 2</label><select className="pro-input" value={selectedTeam2} onChange={(e) => setSelectedTeam2(e.target.value)} disabled={!selectedTeam}><option value="">Select a different team</option>{team2Options.map((team) => <option key={team.id} value={team.id}>{team.name}</option>)}</select></div>
+            <div className="col-12"><label className="field-label">Tournament</label><select className="pro-input" value={selectedTournament} onChange={(e) => { setSelectedTournament(e.target.value); setSelectedPlayer(""); setSelectedPlayer2(""); }}><option value="">Select tournament</option>{tournaments.map((tournament) => <option key={tournament.id} value={tournament.id}>{tournament.name}</option>)}</select></div>
+            <div className="col-md-6"><label className="field-label">Player 1</label><select className="pro-input" value={selectedPlayer} onChange={(e) => { setSelectedPlayer(e.target.value); setSelectedPlayer2(""); }}><option value="">Select player</option>{approvedApplications.map((application) => <option key={application.player_id} value={application.player_id}>{application.player_username}</option>)}</select></div>
+            <div className="col-md-6"><label className="field-label">Player 2</label><select className="pro-input" value={selectedPlayer2} onChange={(e) => setSelectedPlayer2(e.target.value)} disabled={!selectedPlayer}><option value="">Select a different player</option>{player2Options.map((application) => <option key={application.player_id} value={application.player_id}>{application.player_username}</option>)}</select></div>
             <div className="col-md-6"><label className="field-label">Match date and time</label><input type="datetime-local" className="pro-input" value={matchDate} onChange={(e) => setMatchDate(e.target.value)} /></div>
           </div>
-          <div className="info-callout mt-4">Only approved tournament registrations are available for scheduling.</div>
+          <div className="info-callout mt-4">Only players with approved applications for this tournament are available.</div>
           <div className="d-flex gap-2 mt-4"><button className="pro-btn pro-btn-primary" onClick={scheduleMatch}>Schedule match</button><button className="pro-btn pro-btn-outline" onClick={() => setPage("dashboard")}>Cancel</button></div>
           {message && <MessageBanner message={message} />}
         </div>
@@ -1404,7 +1527,7 @@ const createTeam = async () => {
           <label className="field-label">Match</label>
           <select className="pro-input" value={selectedMatch} onChange={(e) => { setSelectedMatch(e.target.value); setWinnerId(""); }}>
             <option value="">Select an unfinished match</option>
-            {matches.filter((match) => !match.winner_name).map((match) => <option key={match.id} value={match.id}>{match.team1_name} vs {match.team2_name}</option>)}
+            {matches.filter((match) => !match.winner_name && !match.winner_player_name).map((match) => <option key={match.id} value={match.id}>{match.player1_name || match.team1_name} vs {match.player2_name || match.team2_name}</option>)}
           </select>
 
           {selectedMatch && (() => {
@@ -1415,7 +1538,12 @@ const createTeam = async () => {
                 <label className="field-label mt-3">Winner</label>
                 <select className="pro-input" value={winnerId} onChange={(e) => setWinnerId(e.target.value)}>
                   <option value="">Select winner</option>
-                  {teams.filter((team) => team.id === match.team1_id || team.id === match.team2_id).map((team) => <option key={team.id} value={team.id}>{team.name}</option>)}
+                  {match.player1_id ? (
+                    <>
+                      <option value={match.player1_id}>{match.player1_name}</option>
+                      <option value={match.player2_id}>{match.player2_name}</option>
+                    </>
+                  ) : teams.filter((team) => team.id === match.team1_id || team.id === match.team2_id).map((team) => <option key={team.id} value={team.id}>{team.name}</option>)}
                 </select>
               </>
             );
@@ -1762,7 +1890,9 @@ const AppLayout = ({ user, page, setPage, logout, children }) => {
           </div>
           <div className="side-label">Main menu</div>
           <div className="side-nav">
-            {NAV_MAIN.map((item) => (
+            {NAV_MAIN.filter((item) =>
+              ["dashboard", "tournaments", "matches", "leaderboard"].includes(item.key)
+            ).map((item) => (
               <button key={item.key} className={`side-btn ${page === item.key ? "active" : ""}`} onClick={() => go(item.key)}>
                 {item.icon}{item.label}
               </button>
@@ -1771,10 +1901,10 @@ const AppLayout = ({ user, page, setPage, logout, children }) => {
 
           <div className="side-label">My workspace</div>
           <div className="side-nav">
-            {user?.role === "TEAM_MANAGER" && <button className={`side-btn ${page === "createTeam" ? "active" : ""}`} onClick={() => go("createTeam")}><Icon.Plus />Create my team</button>}
+            {user?.role === "PLAYER" && <button className={`side-btn ${page === "playerApplications" ? "active" : ""}`} onClick={() => go("playerApplications")}><Icon.Clipboard />Apply to play</button>}
             {user?.role === "ORGANIZER" && <>
               <button className={`side-btn ${page === "createTournament" ? "active" : ""}`} onClick={() => go("createTournament")}><Icon.Plus />Create tournament</button>
-              <button className={`side-btn ${page === "registrations" ? "active" : ""}`} onClick={() => go("registrations")}><Icon.Clipboard />Registrations</button>
+              <button className={`side-btn ${page === "applications" ? "active" : ""}`} onClick={() => go("applications")}><Icon.Clipboard />Player applications</button>
               <button className={`side-btn ${page === "scheduleMatch" ? "active" : ""}`} onClick={() => go("scheduleMatch")}><Icon.Calendar />Schedule match</button>
               <button className={`side-btn ${page === "matchResult" ? "active" : ""}`} onClick={() => go("matchResult")}><Icon.Medal />Match result</button>
             </>}

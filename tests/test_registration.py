@@ -17,6 +17,7 @@ from app.models.audit_log import AuditLog
 from app.models.leaderboard import Leaderboard
 from app.models.match import Match
 from app.models.registration import Registration
+from app.models.player_registration import PlayerRegistration
 from app.models.team import Team
 from app.models.team_member import TeamMember
 from app.models.tournament import Tournament
@@ -75,7 +76,13 @@ def registration_context(tmp_path):
         password="hash",
         role="PLAYER",
     )
-    db.add_all([manager, other_manager, organizer, other_organizer, player])
+    player_two = User(
+        username="player-two",
+        email="player-two@example.com",
+        password="TestPassword123!",
+        role="PLAYER",
+    )
+    db.add_all([manager, other_manager, organizer, other_organizer, player, player_two])
     db.flush()
 
     team = Team(name="Team One", manager_id=manager.id)
@@ -101,6 +108,7 @@ def registration_context(tmp_path):
         "organizer": organizer,
         "other_organizer": other_organizer,
         "player": player,
+        "player_two": player_two,
         "team": team,
         "other_team": other_team,
         "tournament": tournament,
@@ -439,3 +447,135 @@ def test_valid_result_updates_match_and_leaderboard(registration_client, registr
     assert rows["Team One"]["points"] == 3
     assert rows["Team One"]["wins"] == 1
     assert rows["Team Two"]["losses"] == 1
+
+
+def test_player_can_apply_and_see_pending_application(registration_client, registration_context):
+    client, _ = registration_client
+    context = registration_context
+    response = client.post(
+        "/applications/",
+        headers=auth_header(context["player"]),
+        json={"tournament_id": context["tournament"].id},
+    )
+    assert response.status_code == 200
+    assert response.json()["status"] == "pending"
+
+    applications = client.get(
+        "/applications/",
+        headers=auth_header(context["player"]),
+    )
+    assert applications.status_code == 200
+    assert applications.json()[0]["player_id"] == context["player"].id
+
+
+def test_organizer_can_approve_player_application(registration_client, registration_context):
+    client, _ = registration_client
+    context = registration_context
+    created = client.post(
+        "/applications/",
+        headers=auth_header(context["player"]),
+        json={"tournament_id": context["tournament"].id},
+    )
+    application_id = created.json()["id"]
+
+    response = client.put(
+        f"/applications/{application_id}/approve",
+        headers=auth_header(context["organizer"]),
+    )
+    assert response.status_code == 200
+    assert response.json()["status"] == "approved"
+
+
+def test_player_application_is_scoped_to_tournament_organizer(registration_client, registration_context):
+    client, _ = registration_client
+    context = registration_context
+    created = client.post(
+        "/applications/",
+        headers=auth_header(context["player"]),
+        json={"tournament_id": context["tournament"].id},
+    )
+    application_id = created.json()["id"]
+
+    response = client.put(
+        f"/applications/{application_id}/approve",
+        headers=auth_header(context["other_organizer"]),
+    )
+    assert response.status_code == 403
+
+
+def apply_player(client, context, player_key):
+    response = client.post(
+        "/applications/",
+        headers=auth_header(context[player_key]),
+        json={"tournament_id": context["tournament"].id},
+    )
+    assert response.status_code == 200
+    application_id = response.json()["id"]
+    approved = client.put(
+        f"/applications/{application_id}/approve",
+        headers=auth_header(context["organizer"]),
+    )
+    assert approved.status_code == 200
+
+
+def player_match_payload(context):
+    return {
+        "tournament_id": context["tournament"].id,
+        "player1_id": context["player"].id,
+        "player2_id": context["player_two"].id,
+        "match_date": "2026-09-22T12:00:00",
+    }
+
+
+def test_approved_players_can_be_scheduled(registration_client, registration_context):
+    client, _ = registration_client
+    context = registration_context
+    apply_player(client, context, "player")
+    apply_player(client, context, "player_two")
+    response = client.post(
+        "/matches/",
+        headers=auth_header(context["organizer"]),
+        json=player_match_payload(context),
+    )
+    assert response.status_code == 200
+    assert response.json()["player1_id"] == context["player"].id
+
+
+def test_pending_player_cannot_be_scheduled(registration_client, registration_context):
+    client, _ = registration_client
+    context = registration_context
+    apply_player(client, context, "player")
+    pending = client.post(
+        "/applications/",
+        headers=auth_header(context["player_two"]),
+        json={"tournament_id": context["tournament"].id},
+    )
+    assert pending.status_code == 200
+    response = client.post(
+        "/matches/",
+        headers=auth_header(context["organizer"]),
+        json=player_match_payload(context),
+    )
+    assert response.status_code == 400
+
+
+def test_player_result_updates_player_leaderboard(registration_client, registration_context):
+    client, _ = registration_client
+    context = registration_context
+    apply_player(client, context, "player")
+    apply_player(client, context, "player_two")
+    scheduled = client.post(
+        "/matches/",
+        headers=auth_header(context["organizer"]),
+        json=player_match_payload(context),
+    )
+    response = client.put(
+        f"/matches/{scheduled.json()['id']}/result",
+        headers=auth_header(context["organizer"]),
+        json={"winner_id": context["player"].id, "result": "2-1"},
+    )
+    assert response.status_code == 200
+    leaderboard = client.get("/leaderboard/").json()
+    rows = {row["team_name"]: row for row in leaderboard}
+    assert rows["player"]["points"] == 3
+    assert rows["player-two"]["losses"] == 1
