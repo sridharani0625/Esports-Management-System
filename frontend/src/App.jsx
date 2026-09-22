@@ -41,7 +41,6 @@ function App() {
   const [message, setMessage] = useState("");
 
   const [selectedMemberTeam, setSelectedMemberTeam] = useState("");
-  const [playerId, setPlayerId] = useState("");
   const [teamMembers, setTeamMembers] = useState([]);
   const [adminStats, setAdminStats] = useState(null);
   const [adminUsers, setAdminUsers] = useState([]);
@@ -698,37 +697,6 @@ const createTeam = async () => {
     }
   };
 
-  const addTeamMember = async () => {
-    if (!selectedMemberTeam || !playerId) {
-      setMessage("Please select a team and enter player ID");
-      return;
-    }
-    try {
-      const token = localStorage.getItem("access_token");
-
-      const config = {
-        headers: {
-          Authorization: "Bearer " + token
-        },
-      };
-
-      const response = await axios.post(
-        `${API_URL}/teams/${selectedMemberTeam}/members`,
-        { player_id: Number(playerId) },
-        config
-      );
-      setMessage(response.data.message || "Player added to team successfully");
-      setPlayerId("");
-      await loadTeamMembers(selectedMemberTeam);
-    } catch (error) {
-      setMessage(
-        error.response?.data?.detail ||
-        error.response?.data?.message ||
-        "Could not add player"
-      );
-    }
-  };
-
   const openAdminPanel = async () => {
     try {
       const token = localStorage.getItem("access_token");
@@ -948,21 +916,6 @@ const createTeam = async () => {
     const upcomingTournaments = tournaments.filter(
       (tournament) => String(tournament.status).toLowerCase() === "upcoming"
     );
-    const managedTeamIds = new Set(
-      teams
-        .filter((team) => String(team.manager_id) === String(user.user_id))
-        .map((team) => String(team.id))
-    );
-    const dashboardMatches =
-      user.role === "TEAM_MANAGER"
-        ? matches.filter(
-            (match) =>
-              String(match.status).toLowerCase() === "upcoming" &&
-              (managedTeamIds.has(String(match.team1_id)) ||
-                managedTeamIds.has(String(match.team2_id)))
-          )
-        : matches;
-
     return (
       <AppLayout user={user} page={page} setPage={setPage} logout={logout}>
         <div className="page-intro">
@@ -992,13 +945,8 @@ const createTeam = async () => {
           </div>
         ) : (
           <div className="row g-3 mb-5">
-            <StatCard icon={<Icon.Trophy />} label="Upcoming tournaments" value={user.role === "TEAM_MANAGER" || user.role === "PLAYER" ? upcomingTournaments.length : tournaments.length} hint="Events going to happen" />
-            {user.role !== "PLAYER" && (user.role !== "TEAM_MANAGER" || dashboardMatches.length > 0) && (
-              <StatCard icon={<Icon.Target />} label="Matches" value={dashboardMatches.length} hint="Matches involving your team" />
-            )}
-            {user.role !== "TEAM_MANAGER" && (
-              <StatCard icon={<Icon.Chart />} label="Leaderboard" value={leaderboard.length} hint="Ranked players" />
-            )}
+            <StatCard icon={<Icon.Trophy />} label="Upcoming tournaments" value={upcomingTournaments.length} hint="Events going to happen" />
+            <StatCard icon={<Icon.Chart />} label="Leaderboard" value={leaderboard.length} hint="Ranked players" />
           </div>
         )}
 
@@ -1018,9 +966,6 @@ const createTeam = async () => {
               <ActionCard icon={<Icon.Chart />} title="Scoreboard" text="Check scores, rankings, wins and losses." onClick={openLeaderboard} />
             </>
           )}
-          {user.role !== "ORGANIZER" && user.role !== "PLAYER" && <ActionCard icon={<Icon.Trophy />} title="Tournaments" text="Browse available esports tournaments." onClick={openTournaments} />}
-          {user.role !== "ORGANIZER" && user.role !== "PLAYER" && <ActionCard icon={<Icon.Target />} title="Matches" text="Track scheduled and completed matches." onClick={openMatches} />}
-          {user.role !== "ORGANIZER" && user.role !== "PLAYER" && <ActionCard icon={<Icon.Chart />} title="Leaderboard" text="Check rankings, points, wins and losses." onClick={openLeaderboard} />}
           {user.role === "ORGANIZER" && (
             <>
               <ActionCard icon={<Icon.Plus />} title="Create tournament" text="Post a tournament for players to apply." onClick={() => setPage("createTournament")} accent />
@@ -1044,7 +989,7 @@ const createTeam = async () => {
 
   if (page === "tournaments") {
     const visibleTournaments =
-      user.role === "TEAM_MANAGER" || user.role === "PLAYER"
+      user.role === "PLAYER"
         ? tournaments.filter(
             (tournament) =>
               String(tournament.status).toLowerCase() === "upcoming"
@@ -1302,18 +1247,7 @@ const createTeam = async () => {
 
         {selectedMemberTeam && (
           <div className="row g-4">
-            {user.role === "TEAM_MANAGER" && (
-              <div className="col-lg-4">
-                <div className="pro-card h-100">
-                  <span className="kicker">Add player</span>
-                  <h3 className="mt-2">Build the roster</h3>
-                  <p className="text-muted-custom">Enter the player ID of an eligible player account.</p>
-                  <input type="number" className="pro-input" placeholder="Player ID" value={playerId} onChange={(e) => setPlayerId(e.target.value)} />
-                  <button className="pro-btn pro-btn-primary w-100 mt-3" onClick={addTeamMember}>Add player</button>
-                </div>
-              </div>
-            )}
-            <div className={user.role === "TEAM_MANAGER" ? "col-lg-8" : "col-lg-12"}>
+            <div className="col-lg-12">
               <div className="pro-card">
                 <div className="d-flex justify-content-between align-items-center mb-3">
                   <div><span className="kicker">Roster</span><h3 className="mt-1 mb-0">Current members</h3></div>
@@ -1421,17 +1355,7 @@ const createTeam = async () => {
   // =========================
 
   if (page === "matches") {
-    const visibleMatches =
-      user.role === "TEAM_MANAGER"
-        ? matches.filter((match) =>
-            teams.some(
-              (team) =>
-                String(team.manager_id) === String(user.user_id) &&
-                (String(team.id) === String(match.team1_id) ||
-                  String(team.id) === String(match.team2_id))
-            )
-          )
-        : matches;
+    const visibleMatches = matches;
 
     return (
       <AppLayout user={user} page={page} setPage={setPage} logout={logout}>
@@ -1902,7 +1826,7 @@ const AppLayout = ({ user, page, setPage, logout, children }) => {
           </div>
 
           <div className="side-nav">
-            {(user?.role === "ORGANIZER" ? organizerNav : playerNav).map((item) => (
+            {(user?.role === "ORGANIZER" ? organizerNav : user?.role === "PLAYER" ? playerNav : []).map((item) => (
               <button key={item.key} className={`side-btn ${page === item.key ? "active" : ""}`} onClick={() => go(item.key)}>
                 {item.icon}{item.label}
               </button>
