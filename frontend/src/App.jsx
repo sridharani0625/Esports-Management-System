@@ -219,7 +219,7 @@ const login = async () => {
 
       const config = {
         headers: {
-          Authorization: `Bearer ${response.data.access_token}`
+          Authorization: "Bearer " + token
         },
       };
 
