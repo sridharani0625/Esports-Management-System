@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import axios from "axios";
 import "bootstrap/dist/css/bootstrap.min.css";
 
@@ -25,7 +25,6 @@ function App() {
 
   const [selectedTournament, setSelectedTournament] = useState("");
   const [selectedTeam, setSelectedTeam] = useState("");
-  const [selectedTeam2, setSelectedTeam2] = useState("");
   const [selectedPlayer, setSelectedPlayer] = useState("");
   const [selectedPlayer2, setSelectedPlayer2] = useState("");
   const [matchDate, setMatchDate] = useState("");
@@ -45,11 +44,6 @@ function App() {
   const [selectedMemberTeam, setSelectedMemberTeam] = useState("");
   const [playerId, setPlayerId] = useState("");
   const [teamMembers, setTeamMembers] = useState([]);
-useEffect(() => {
-  if (page === "teamMembers") {
-    openTeamMembers();
-  }
-}, [page]);
   const [adminStats, setAdminStats] = useState(null);
   const [adminUsers, setAdminUsers] = useState([]);
   const [auditLogs, setAuditLogs] = useState([]);
@@ -133,7 +127,6 @@ const login = async () => {
     return;
   }
 
-  const startTime = Date.now();
   setIsLoggingIn(true);
   try {
     const response = await axios.post(`${API_URL}/users/login`, {
@@ -149,6 +142,18 @@ const login = async () => {
       "access_token",
       response.data.access_token
     );
+
+    try {
+      await loadDashboardData(response.data.role);
+      if (response.data.role === "ORGANIZER") {
+        const applicationsResponse = await axios.get(`${API_URL}/applications/`, {
+          headers: { Authorization: "Bearer " + response.data.access_token },
+        });
+        setRegistrations(applicationsResponse.data);
+      }
+    } catch (error) {
+      console.error("Post-login data loading failed", error);
+    }
 
     setMessage("Login successful");
 
@@ -166,11 +171,6 @@ const login = async () => {
       error.response?.data?.detail || "Login failed"
     );
   } finally {
-    const elapsed = Date.now() - startTime;
-    const remaining = Math.max(0, 500 - elapsed);
-    if (remaining > 0) {
-      await new Promise((resolve) => setTimeout(resolve, remaining));
-    }
     setIsLoggingIn(false);
   }
 };
@@ -186,22 +186,41 @@ const login = async () => {
     setShowPassword(false);
   };
 
-  const loadDashboardData = async () => {
+  const loadDashboardData = async (role = user?.role) => {
     try {
-      const [tournamentsResponse, teamsResponse, matchesResponse, leaderboardResponse] =
-        await Promise.all([
-          axios.get(`${API_URL}/tournaments/`),
+      const tournamentsResponse = await axios.get(`${API_URL}/tournaments/`);
+
+      setTournaments(tournamentsResponse.data);
+      if (role === "ORGANIZER") {
+        const [matchesResponse, leaderboardResponse] = await Promise.all([
+          axios.get(`${API_URL}/matches/`),
+          axios.get(`${API_URL}/leaderboard/`),
+        ]);
+        setMatches(matchesResponse.data);
+        setLeaderboard(leaderboardResponse.data);
+      } else {
+        const [teamsResponse, matchesResponse, leaderboardResponse] = await Promise.all([
           axios.get(`${API_URL}/teams/`),
           axios.get(`${API_URL}/matches/`),
           axios.get(`${API_URL}/leaderboard/`),
         ]);
-
-      setTournaments(tournamentsResponse.data);
-      setTeams(teamsResponse.data);
-      setMatches(matchesResponse.data);
-      setLeaderboard(leaderboardResponse.data);
+        setTeams(teamsResponse.data);
+        setMatches(matchesResponse.data);
+        setLeaderboard(leaderboardResponse.data);
+      }
     } catch (error) {
       console.error("Dashboard data loading failed", error);
+    }
+  };
+
+  const openScoreEntry = async () => {
+    try {
+      const response = await axios.get(`${API_URL}/matches/`);
+      setMatches(response.data);
+      setPage("matchResult");
+      setMessage("");
+    } catch (error) {
+      setMessage(error.response?.data?.detail || "Could not load match results");
     }
   };
 
@@ -269,21 +288,6 @@ const login = async () => {
   // TEAMS
   // =========================
 
-  const openTeams = async () => {
-    try {
-      const response = await axios.get(`${API_URL}/teams/`);
-
-      setTeams(response.data);
-      setPage("teams");
-      setMessage("");
-    } catch (error) {
-      setMessage(
-        error.response?.data?.detail ||
-          "Could not load teams"
-      );
-    }
-  };
-
 const createTeam = async () => {
   if (!teamName.trim()) {
     setMessage("Please enter team name");
@@ -335,44 +339,6 @@ const createTeam = async () => {
   // REGISTER TEAM
   // =========================
 
-  const openRegisterPage = async () => {
-    try {
-      const token = localStorage.getItem("access_token");
-      const config = {
-        headers: { Authorization: "Bearer " + token },
-      };
-      const tournamentResponse = await axios.get(
-        `${API_URL}/tournaments/`
-      );
-
-      setTournaments(tournamentResponse.data);
-
-      const teamResponse = await axios.get(
-        `${API_URL}/teams/`
-      );
-
-      const registrationResponse = await axios.get(
-        `${API_URL}/registrations/`,
-        config
-      );
-
-      setTeams(
-        teamResponse.data.filter(
-          (team) => team.manager_id === user.user_id
-        )
-      );
-      setRegistrations(registrationResponse.data);
-
-      setPage("registerTeam");
-      setMessage("");
-    } catch (error) {
-      setMessage(
-        error.response?.data?.detail ||
-          "Could not load registration data"
-      );
-    }
-  };
-
   const registerTeam = async () => {
     if (!selectedTournament || !selectedTeam) {
       setMessage(
@@ -421,6 +387,24 @@ const createTeam = async () => {
       setMessage("");
     } catch (error) {
       setMessage(error.response?.data?.detail || "Could not load applications");
+    }
+  };
+
+  const openApprovedApplications = async () => {
+    try {
+      const token = localStorage.getItem("access_token");
+      const [tournamentResponse, applicationResponse] = await Promise.all([
+        axios.get(`${API_URL}/tournaments/`),
+        axios.get(`${API_URL}/applications/`, {
+          headers: { Authorization: "Bearer " + token },
+        }),
+      ]);
+      setTournaments(tournamentResponse.data);
+      setRegistrations(applicationResponse.data.filter((application) => application.status === "approved"));
+      setPage("approvedApplications");
+      setMessage("");
+    } catch (error) {
+      setMessage(error.response?.data?.detail || "Could not load approved applications");
     }
   };
 
@@ -583,33 +567,6 @@ const createTeam = async () => {
   // SCHEDULE MATCH
   // =========================
 
-  const openSchedulePage = async () => {
-    try {
-      const token = localStorage.getItem("access_token");
-      const config = { headers: { Authorization: "Bearer " + token } };
-      const tournamentResponse = await axios.get(
-        `${API_URL}/tournaments/`
-      );
-
-      setTournaments(tournamentResponse.data);
-
-      const applicationResponse = await axios.get(
-        `${API_URL}/applications/`,
-        config
-      );
-
-      setRegistrations(applicationResponse.data);
-
-      setPage("scheduleMatch");
-      setMessage("");
-    } catch (error) {
-      setMessage(
-        error.response?.data?.detail ||
-          "Could not load scheduling data"
-      );
-    }
-  };
-
   const scheduleMatch = async () => {
     if (
       !selectedTournament ||
@@ -647,7 +604,6 @@ const createTeam = async () => {
 
       setSelectedTournament("");
       setSelectedTeam("");
-      setSelectedTeam2("");
       setSelectedPlayer("");
       setSelectedPlayer2("");
       setMatchDate("");
@@ -664,29 +620,6 @@ const createTeam = async () => {
   // =========================
   // ENTER MATCH RESULT
   // =========================
-
- const openResultPage = async () => {
-  try {
-    const matchResponse = await axios.get(
-      `${API_URL}/matches/`
-    );
-
-    const teamResponse = await axios.get(
-      `${API_URL}/teams/`
-    );
-
-    setMatches(matchResponse.data);
-    setTeams(teamResponse.data);
-
-    setPage("matchResult");
-    setMessage("");
-  } catch (error) {
-    setMessage(
-      error.response?.data?.detail ||
-        "Could not load match result data"
-    );
-  }
-};
 
   const enterMatchResult = async () => {
     if (!selectedMatch || !winnerId || !result) {
@@ -736,19 +669,6 @@ const createTeam = async () => {
     }
   };
 
-
-  const openTeamMembers = async () => {
-    try {
-      const response = await axios.get(`${API_URL}/teams/`);
-      setTeams(response.data);
-      setSelectedMemberTeam("");
-      setTeamMembers([]);
-      setPage("teamMembers");
-      setMessage("");
-    } catch (error) {
-      setMessage(error.response?.data?.detail || "Could not load teams");
-    }
-  };
 
   const loadTeamMembers = async (teamId) => {
     if (!teamId) {
@@ -827,19 +747,19 @@ const createTeam = async () => {
   if (page === "login") {
     return (
       <AuthLayout>
-        <div className="auth-card">
+        <div className="auth-card" style={{ margin: 0 }}>
           <div className="auth-brand">
             <div className="brand-mark"><Icon.Trophy /></div>
             <div>
-              <div className="brand-name">Arenaboard</div>
-              <div className="brand-subtitle">Esports operations</div>
+              <div className="brand-name">Esports Management</div>
+              <div className="brand-subtitle">Compete. Connect. Win.</div>
             </div>
           </div>
 
           <div className="auth-heading">
             <span className="kicker">Welcome back</span>
-            <h1>Sign in to your workspace</h1>
-            <p>Manage tournaments, teams, matches and rankings from one place.</p>
+            <h1>Sign in</h1>
+            <p>Manage tournaments, player approvals, and match outcomes from one professional dashboard.</p>
           </div>
 
           <label className="field-label">Email address</label>
@@ -1051,15 +971,22 @@ const createTeam = async () => {
           <div className="hero-icon"><Icon.Trophy /></div>
         </div>
 
-        <div className="row g-3 mb-5">
-          <StatCard icon={<Icon.Trophy />} label="Tournaments" value={user.role === "TEAM_MANAGER" ? upcomingTournaments.length : tournaments.length} hint="Available events" />
-          {(user.role !== "TEAM_MANAGER" || dashboardMatches.length > 0) && (
-            <StatCard icon={<Icon.Target />} label="Matches" value={dashboardMatches.length} hint="Matches involving your team" />
-          )}
-          {user.role !== "TEAM_MANAGER" && (
-            <StatCard icon={<Icon.Chart />} label="Leaderboard" value={leaderboard.length} hint="Ranked teams" />
-          )}
-        </div>
+        {user.role === "ORGANIZER" ? (
+          <div className="row g-3 mb-5">
+            <StatCard icon={<Icon.Trophy />} label="My tournaments" value={tournaments.filter((tournament) => String(tournament.organizer_id) === String(user.user_id)).length} hint="Created by you" />
+            <StatCard icon={<Icon.Clipboard />} label="Player applications" value={registrations.length} hint="For your tournaments" />
+          </div>
+        ) : (
+          <div className="row g-3 mb-5">
+            <StatCard icon={<Icon.Trophy />} label="Upcoming tournaments" value={user.role === "TEAM_MANAGER" || user.role === "PLAYER" ? upcomingTournaments.length : tournaments.length} hint="Events going to happen" />
+            {user.role !== "PLAYER" && (user.role !== "TEAM_MANAGER" || dashboardMatches.length > 0) && (
+              <StatCard icon={<Icon.Target />} label="Matches" value={dashboardMatches.length} hint="Matches involving your team" />
+            )}
+            {user.role !== "TEAM_MANAGER" && (
+              <StatCard icon={<Icon.Chart />} label="Leaderboard" value={leaderboard.length} hint="Ranked players" />
+            )}
+          </div>
+        )}
 
         <div className="section-heading">
           <div>
@@ -1069,18 +996,22 @@ const createTeam = async () => {
         </div>
 
         <div className="row g-3">
-          <ActionCard icon={<Icon.Trophy />} title="Tournaments" text="Browse available esports tournaments." onClick={openTournaments} />
-          <ActionCard icon={<Icon.Target />} title="Matches" text="Track scheduled and completed matches." onClick={openMatches} />
-          <ActionCard icon={<Icon.Chart />} title="Leaderboard" text="Check rankings, points, wins and losses." onClick={openLeaderboard} />
           {user.role === "PLAYER" && (
-            <ActionCard icon={<Icon.Clipboard />} title="Apply to play" text="Apply for tournaments and track approval status." onClick={openPlayerApplications} accent />
+            <>
+              <ActionCard icon={<Icon.Trophy />} title="Upcoming tournaments" text="Browse tournaments that are going to happen and are open for play." onClick={openTournaments} accent />
+              <ActionCard icon={<Icon.Clipboard />} title="Apply to match" text="Apply to participate in an upcoming tournament match." onClick={openPlayerApplications} />
+              <ActionCard icon={<Icon.Medal />} title="Approved applications" text="View the tournaments where you have been approved." onClick={openApprovedApplications} />
+              <ActionCard icon={<Icon.Chart />} title="Scoreboard" text="Check scores, rankings, wins and losses." onClick={openLeaderboard} />
+            </>
           )}
+          {user.role !== "ORGANIZER" && user.role !== "PLAYER" && <ActionCard icon={<Icon.Trophy />} title="Tournaments" text="Browse available esports tournaments." onClick={openTournaments} />}
+          {user.role !== "ORGANIZER" && user.role !== "PLAYER" && <ActionCard icon={<Icon.Target />} title="Matches" text="Track scheduled and completed matches." onClick={openMatches} />}
+          {user.role !== "ORGANIZER" && user.role !== "PLAYER" && <ActionCard icon={<Icon.Chart />} title="Leaderboard" text="Check rankings, points, wins and losses." onClick={openLeaderboard} />}
           {user.role === "ORGANIZER" && (
             <>
-              <ActionCard icon={<Icon.Plus />} title="Create tournament" text="Launch a new esports event." onClick={() => setPage("createTournament")} accent />
-              <ActionCard icon={<Icon.Clipboard />} title="Applications" text="Approve players for your tournaments." onClick={openManageApplications} />
-              <ActionCard icon={<Icon.Calendar />} title="Schedule match" text="Schedule matches between approved teams." onClick={openSchedulePage} />
-              <ActionCard icon={<Icon.Medal />} title="Match result" text="Record completed match outcomes." onClick={openResultPage} />
+              <ActionCard icon={<Icon.Plus />} title="Create tournament" text="Post a tournament for players to apply." onClick={() => setPage("createTournament")} accent />
+              <ActionCard icon={<Icon.Clipboard />} title="Approve players" text="Review applications for your tournaments only." onClick={openManageApplications} />
+              <ActionCard icon={<Icon.Medal />} title="Scoreboard" text="Enter the final score for completed match results and update standings." onClick={openScoreEntry} />
             </>
           )}
           {user.role === "ADMIN" && (
@@ -1097,7 +1028,7 @@ const createTeam = async () => {
 
   if (page === "tournaments") {
     const visibleTournaments =
-      user.role === "TEAM_MANAGER"
+      user.role === "TEAM_MANAGER" || user.role === "PLAYER"
         ? tournaments.filter(
             (tournament) =>
               String(tournament.status).toLowerCase() === "upcoming"
@@ -1139,7 +1070,7 @@ const createTeam = async () => {
   if (page === "createTournament") {
     return (
       <AppLayout user={user} page={page} setPage={setPage} logout={logout}>
-        <PageHeader eyebrow="Organizer workspace" title="Create tournament" subtitle="Configure a new competition for participating teams." />
+        <PageHeader eyebrow="Organizer workspace" title="Create tournament" subtitle="Publish a competition that players can apply to join." />
         <div className="form-panel">
           <div className="form-panel-icon"><Icon.Trophy /></div>
           <div className="row g-4">
@@ -1308,6 +1239,35 @@ const createTeam = async () => {
     );
   }
 
+  if (page === "approvedApplications") {
+    return (
+      <AppLayout user={user} page={page} setPage={setPage} logout={logout}>
+        <PageHeader eyebrow="Player workspace" title="Approved applications" subtitle="These are the tournaments where the organizer has approved you to play." />
+        {registrations.length === 0 ? (
+          <EmptyState icon={<Icon.Clipboard />} title="No approved applications" text="Approved tournament applications will appear here." />
+        ) : (
+          <div className="row g-4">
+            {registrations.map((application) => (
+              <div className="col-xl-4 col-md-6" key={application.id}>
+                <div className="pro-card tournament-card h-100">
+                  <div className="card-topline">
+                    <span className="mini-icon"><Icon.Trophy /></span>
+                    <StatusBadge status={application.status} />
+                  </div>
+                  <h3>{application.tournament_name}</h3>
+                  <div className="muted-row"><Icon.Game />{application.game}</div>
+                  <p>You are approved to play. The organizer will schedule your match.</p>
+                  <div className="card-footer-line">Application #{application.id}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+        {message && <MessageBanner message={message} />}
+      </AppLayout>
+    );
+  }
+
   // =========================
   // TEAM MEMBERS
   // =========================
@@ -1369,7 +1329,7 @@ const createTeam = async () => {
   if (page === "applications") {
     return (
       <AppLayout user={user} page={page} setPage={setPage} logout={logout}>
-        <PageHeader eyebrow="Organizer workspace" title="Player applications" subtitle="Approve players for tournaments you organize." />
+        <PageHeader eyebrow="Organizer workspace" title="Player applications" subtitle="Approve or reject players who want to enter your tournaments." />
         {message && <MessageBanner message={message} />}
         {registrations.length === 0 ? (
           <EmptyState icon={<Icon.Clipboard />} title="No applications found" text="Player applications will appear here." />
@@ -1403,7 +1363,7 @@ const createTeam = async () => {
   if (page === "registrations") {
     return (
       <AppLayout user={user} page={page} setPage={setPage} logout={logout}>
-        <PageHeader eyebrow="Organizer workspace" title="Registrations" subtitle="Review incoming team entries and approve eligible registrations." />
+        <PageHeader eyebrow="Legacy team workflow" title="Registrations" subtitle="Legacy team registrations are retained for existing data." />
         {message && <MessageBanner message={message} />}
         {registrations.length === 0 ? (
           <EmptyState icon={<Icon.Clipboard />} title="No registrations found" text="New team registrations will appear here." />
@@ -1519,18 +1479,26 @@ const createTeam = async () => {
   // =========================
 
   if (page === "matchResult") {
+    const unfinishedMatches = matches.filter(
+      (match) => !match.winner_name && !match.winner_player_name && !match.result
+    );
+
     return (
       <AppLayout user={user} page={page} setPage={setPage} logout={logout}>
-        <PageHeader eyebrow="Match center" title="Enter match result" subtitle="Record the final winner and score for a completed fixture." />
+        <PageHeader eyebrow="Organizer scoreboard" title="Enter match result" subtitle="Record the final winner and score for a completed fixture." />
         <div className="form-panel narrow-panel">
           <div className="form-panel-icon"><Icon.Medal /></div>
-          <label className="field-label">Match</label>
-          <select className="pro-input" value={selectedMatch} onChange={(e) => { setSelectedMatch(e.target.value); setWinnerId(""); }}>
-            <option value="">Select an unfinished match</option>
-            {matches.filter((match) => !match.winner_name && !match.winner_player_name).map((match) => <option key={match.id} value={match.id}>{match.player1_name || match.team1_name} vs {match.player2_name || match.team2_name}</option>)}
-          </select>
+          {unfinishedMatches.length === 0 ? (
+            <EmptyState icon={<Icon.Medal />} title="All match results are up to date" text="There are no unfinished matches waiting for a winner and score." />
+          ) : (
+            <>
+              <label className="field-label">Match</label>
+              <select className="pro-input" value={selectedMatch} onChange={(e) => { setSelectedMatch(e.target.value); setWinnerId(""); }}>
+                <option value="">Select an unfinished match</option>
+                {unfinishedMatches.map((match) => <option key={match.id} value={match.id}>{match.player1_name || match.team1_name} vs {match.player2_name || match.team2_name}</option>)}
+              </select>
 
-          {selectedMatch && (() => {
+              {selectedMatch && (() => {
             const match = matches.find((m) => m.id === Number(selectedMatch));
             if (!match) return null;
             return (
@@ -1547,11 +1515,13 @@ const createTeam = async () => {
                 </select>
               </>
             );
-          })()}
+              })()}
 
-          <label className="field-label mt-3">Final result</label>
-          <input className="pro-input" placeholder="Example: 2-1" value={result} onChange={(e) => setResult(e.target.value)} />
-          <button className="pro-btn pro-btn-primary w-100 mt-4" onClick={enterMatchResult}>Submit result</button>
+              <label className="field-label mt-3">Final result</label>
+              <input className="pro-input" placeholder="Example: 2-1" value={result} onChange={(e) => setResult(e.target.value)} />
+              <button className="pro-btn pro-btn-primary w-100 mt-4" onClick={enterMatchResult}>Submit result</button>
+            </>
+          )}
           {message && <MessageBanner message={message} />}
         </div>
       </AppLayout>
@@ -1565,9 +1535,9 @@ const createTeam = async () => {
   if (page === "leaderboard") {
     return (
       <AppLayout user={user} page={page} setPage={setPage} logout={logout}>
-        <PageHeader eyebrow="Competitive rankings" title="Leaderboard" subtitle="Follow team performance across tournament matches." />
+        <PageHeader eyebrow="Competitive rankings" title="Leaderboard" subtitle="Follow player performance across tournament matches." />
         {leaderboard.length === 0 ? (
-          <EmptyState icon={<Icon.Chart />} title="No leaderboard data" text="Rankings will appear after teams participate in matches." />
+          <EmptyState icon={<Icon.Chart />} title="No leaderboard data" text="Rankings will appear after players complete matches." />
         ) : (
           <div className="pro-card">
             <div className="table-wrap">
@@ -1685,199 +1655,222 @@ const Icon = {
 // =========================
 
 const GLOBAL_CSS = `
-@import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700;800&family=Inter:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Barlow+Condensed:wght@500;600;700;800&display=swap');
 
 :root{
-  --ink:#0C0F13;
-  --panel:#12151B;
-  --panel-2:#171B22;
-  --line:rgba(255,255,255,.08);
-  --text:#EEF0F3;
-  --muted:#8A93A1;
-  --gold:#D8A13E;
-  --gold-dim:rgba(216,161,62,.14);
-  --teal:#3FB6A6;
-  --teal-dim:rgba(63,182,166,.14);
-  --red:#E5636B;
-  --red-dim:rgba(229,99,107,.14);
-  --radius-sm:6px;
-  --radius-md:10px;
+  --bg:#f3f7fb;
+  --panel:#ffffff;
+  --panel-alt:#f8fafc;
+  --surface:#edf4ff;
+  --line:#e2e8f0;
+  --text:#0f172a;
+  --muted:#64748b;
+  --primary:#2563eb;
+  --primary-deep:#1d4ed8;
+  --primary-soft:#dfeaff;
+  --success:#10b981;
+  --success-soft:#d9fce8;
+  --warning:#f59e0b;
+  --warning-soft:#fff3d6;
+  --danger:#ef4444;
+  --danger-soft:#fee2e2;
+  --shadow:0 16px 40px rgba(15, 23, 42, 0.08);
+  --radius:18px;
+  --radius-sm:12px;
 }
+
 *{box-sizing:border-box}
-body{margin:0;background:var(--ink);font-family:'Inter',ui-sans-serif,system-ui,sans-serif;color:var(--text)}
+html,body,#root{margin:0;min-height:100%}
+body{background:var(--bg);color:var(--text);font-family:'Inter',ui-sans-serif,system-ui,sans-serif}
 button,input,select,textarea{font-family:inherit}
-h1,h2,h3,.brand-name,.stat-value,.points-value,.rank-badge,.team-dot,.team-avatar{font-family:'Barlow Condensed',ui-sans-serif,sans-serif}
+h1,h2,h3,.brand-name,.stat-value,.team-dot,.team-avatar,.rank-badge{font-family:'Barlow Condensed',ui-sans-serif,sans-serif}
 
 .ems-app{min-height:100vh;background:
-  radial-gradient(700px 400px at 100% -5%, rgba(216,161,62,.06), transparent 60%),
-  var(--ink);
+  radial-gradient(circle at top left, rgba(37,99,235,.08), transparent 28%),
+  var(--bg);
   color:var(--text)}
 
 /* ---------- layout shell ---------- */
-.ems-sidebar{position:fixed;z-index:20;left:0;top:0;bottom:0;width:236px;background:#0A0C10;border-right:1px solid var(--line);padding:24px 16px;display:flex;flex-direction:column}
-.ems-main{margin-left:236px;min-height:100vh;padding:32px 40px 60px}
-.brand{display:flex;gap:11px;align-items:center;margin-bottom:34px}
-.brand-mark{width:40px;height:40px;border-radius:var(--radius-sm);display:flex;align-items:center;justify-content:center;background:var(--gold-dim);color:var(--gold);border:1px solid rgba(216,161,62,.3)}
-.brand-name{font-weight:700;font-size:19px;line-height:1}
-.brand-subtitle{font-size:10.5px;color:var(--muted);margin-top:3px;font-family:'Inter';font-weight:500}
-.side-label{font-size:10.5px;color:#5C6472;font-weight:700;margin:20px 4px 8px;text-transform:none}
-.side-nav{display:flex;flex-direction:column;gap:2px}
-.side-btn{display:flex;align-items:center;gap:10px;width:100%;border:1px solid transparent;background:transparent;color:#9AA3B2;padding:9px 10px;border-radius:var(--radius-sm);text-align:left;font-size:13.5px;font-weight:500;transition:background .15s,color .15s}
-.side-btn svg{flex:0 0 auto;opacity:.85}
-.side-btn:hover{background:rgba(255,255,255,.045);color:#fff}
-.side-btn.active{background:var(--gold-dim);color:var(--gold)}
-.side-btn.active svg{opacity:1}
+.ems-sidebar{position:fixed;z-index:20;left:0;top:0;bottom:0;width:250px;background:rgba(255,255,255,.92);backdrop-filter:blur(8px);border-right:1px solid var(--line);padding:22px 18px;display:flex;flex-direction:column}
+.ems-main{margin-left:250px;min-height:100vh;padding:24px 28px 48px}
+.brand{display:flex;gap:12px;align-items:center;padding:8px 10px 18px;border-bottom:1px solid var(--line);margin-bottom:18px}
+.brand-mark{width:42px;height:42px;border-radius:14px;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,var(--primary),#7ea7ff);color:#fff;box-shadow:0 12px 24px rgba(37,99,235,.25)}
+.brand-name{font-weight:800;font-size:1.1rem;line-height:1.1}
+.brand-subtitle{font-size:11px;color:var(--muted);margin-top:3px;font-weight:600}
+.side-label{font-size:10.5px;color:#8090a6;font-weight:700;margin:18px 8px 8px;text-transform:uppercase;letter-spacing:.08em}
+.side-nav{display:flex;flex-direction:column;gap:6px}
+.side-btn{display:flex;align-items:center;gap:11px;width:100%;border:1px solid transparent;background:transparent;color:var(--muted);padding:11px 12px;border-radius:12px;text-align:left;font-size:14px;font-weight:600;transition:all .18s ease}
+.side-btn svg{flex:0 0 auto}
+.side-btn:hover{background:var(--panel-alt);color:var(--text);border-color:var(--line)}
+.side-btn.active{background:var(--primary-soft);border-color:rgba(37,99,235,.1);color:var(--primary-deep)}
+.side-btn.active svg{color:var(--primary-deep)}
 .logout-side{margin-top:auto;padding-top:14px}
-.side-logout{display:flex;align-items:center;gap:9px;width:100%;border:1px solid rgba(229,99,107,.28);background:transparent;color:var(--red);border-radius:var(--radius-sm);padding:9px 10px;font-size:13.5px;font-weight:500}
-.side-logout:hover{background:var(--red-dim)}
+.side-logout{display:flex;align-items:center;gap:9px;width:100%;border:1px solid rgba(239,68,68,.2);background:transparent;color:var(--danger);border-radius:12px;padding:11px 12px;font-size:14px;font-weight:600}
+.side-logout:hover{background:var(--danger-soft)}
 
-.top-userbar{display:flex;justify-content:flex-end;align-items:center;min-height:38px;margin-bottom:22px}
-.user-avatar{width:34px;height:34px;border-radius:var(--radius-sm);background:var(--panel-2);border:1px solid var(--line);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:15px;color:var(--gold)}
-.user-role-text{font-size:10px;color:var(--muted);margin-top:1px;font-weight:500}
+.top-userbar{display:flex;justify-content:flex-end;align-items:center;min-height:44px;margin-bottom:20px}
+.user-avatar{width:38px;height:38px;border-radius:50%;background:linear-gradient(135deg,#dbeafe,#93c5fd);color:var(--primary-deep);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:15px;border:1px solid rgba(37,99,235,.12)}
+.user-role-text{font-size:10px;color:var(--muted);margin-top:1px;font-weight:600}
 
 /* ---------- headings / kickers ---------- */
-.page-intro{display:flex;justify-content:space-between;align-items:flex-end;gap:20px;margin-bottom:24px}
-.page-intro h1,.page-header h1{font-size:30px;font-weight:700;letter-spacing:-.2px;margin:4px 0 6px;line-height:1.05}
-.page-intro p,.page-header p{color:var(--muted);margin:0;font-size:14px}
-.kicker{font-size:11.5px;font-weight:600;color:var(--muted);letter-spacing:.2px}
-.kicker-on-dark{color:rgba(255,255,255,.75)}
+.page-intro{display:flex;justify-content:space-between;align-items:flex-end;gap:20px;margin-bottom:26px}
+.page-intro h1,.page-header h1{font-size:2.2rem;font-weight:800;letter-spacing:-.06em;margin:4px 0 6px;line-height:1.05}
+.page-intro p,.page-header p{color:var(--muted);margin:0;font-size:14px;line-height:1.6}
+.kicker{font-size:11px;font-weight:700;color:var(--muted);letter-spacing:.1em;text-transform:uppercase}
+.kicker-on-dark{color:rgba(255,255,255,.72)}
 .section-heading{margin:4px 0 16px}
-.section-heading h2,.section-title-row h2{font-size:19px;font-weight:700;margin:4px 0 0}
+.section-heading h2,.section-title-row h2{font-size:1.3rem;font-weight:700;margin:4px 0 0;letter-spacing:-.04em}
 
 /* ---------- hero ---------- */
-.hero-panel{min-height:140px;border:1px solid rgba(216,161,62,.22);border-radius:var(--radius-md);padding:26px 28px;display:flex;align-items:center;justify-content:space-between;background:linear-gradient(120deg,#171106,#14181c 65%);box-shadow:0 12px 30px rgba(0,0,0,.3)}
-.hero-panel h2{font-size:25px;margin:6px 0;font-weight:700}
-.hero-panel p{margin:0;color:rgba(255,255,255,.68);font-size:13.5px}
-.hero-icon{font-size:0;color:rgba(216,161,62,.5)}
-.hero-icon svg{width:52px;height:52px}
+.hero-panel{min-height:170px;border:1px solid var(--line);border-radius:22px;padding:26px 28px;display:flex;align-items:center;justify-content:space-between;background:
+  linear-gradient(135deg, rgba(37,99,235,.12), rgba(37,99,235,.02)),
+  url('https://images.unsplash.com/photo-1542751371-adc38448a05e?auto=format&fit=crop&w=1200&q=80') center/cover no-repeat;
+  box-shadow:var(--shadow)}
+.hero-panel h2{font-size:2.1rem;margin:8px 0;font-weight:800;letter-spacing:-.05em;line-height:1.05;color:var(--text)}
+.hero-panel p{margin:0;color:var(--muted);font-size:14px}
+.hero-icon{font-size:0;color:var(--primary)}
+.hero-icon svg{width:56px;height:56px}
 
 /* ---------- stat cards ---------- */
-.stat-card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius-md);padding:18px;min-height:110px}
-.stat-icon{color:var(--gold);opacity:.9}
-.stat-label{font-size:11px;color:var(--muted);font-weight:600}
-.stat-value{font-size:32px;font-weight:700;line-height:1;margin:9px 0 6px;letter-spacing:.2px}
-.stat-hint{font-size:11px;color:#5C6472}
+.stat-card{background:var(--panel);border:1px solid var(--line);border-radius:18px;padding:18px;min-height:120px;box-shadow:0 8px 20px rgba(15,23,42,.03)}
+.stat-icon{color:var(--primary);opacity:.9}
+.stat-label{font-size:11px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.08em}
+.stat-value{font-size:2.1rem;font-weight:800;line-height:1;margin:12px 0 8px;letter-spacing:-.05em}
+.stat-hint{font-size:11px;color:var(--muted)}
 
 /* ---------- generic cards ---------- */
-.pro-card,.form-panel{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius-md);padding:22px}
-.action-card{width:100%;height:100%;min-height:140px;text-align:left;background:var(--panel);border:1px solid var(--line);border-radius:var(--radius-md);color:#fff;padding:20px;transition:border-color .15s,transform .15s}
-.action-card:hover{border-color:rgba(216,161,62,.35);transform:translateY(-2px)}
-.action-card.accent{background:var(--panel);border-color:rgba(63,182,166,.3)}
-.action-card.accent .action-icon{color:var(--teal)}
-.action-icon{color:var(--gold);margin-bottom:16px}
+.pro-card,.form-panel{background:var(--panel);border:1px solid var(--line);border-radius:18px;padding:22px;box-shadow:0 8px 18px rgba(15,23,42,.02)}
+.action-card{width:100%;height:100%;min-height:150px;text-align:left;background:var(--panel);border:1px solid var(--line);border-radius:18px;color:var(--text);padding:20px;transition:all .18s ease;box-shadow:0 8px 18px rgba(15,23,42,.02)}
+.action-card:hover{border-color:rgba(37,99,235,.2);transform:translateY(-2px);box-shadow:0 12px 24px rgba(15,23,42,.05)}
+.action-card.accent{background:var(--surface);border-color:rgba(37,99,235,.12)}
+.action-card.accent .action-icon{color:var(--primary)}
+.action-icon{color:var(--primary);margin-bottom:16px}
 .action-icon svg{width:24px;height:24px}
-.action-card h3{font-size:15.5px;font-weight:700;margin-bottom:5px;font-family:'Inter'}
-.action-card p{color:var(--muted);font-size:12px;margin:0}
+.action-card h3{font-size:1.05rem;font-weight:700;margin-bottom:5px;font-family:'Inter'}
+.action-card p{color:var(--muted);font-size:12px;margin:0;line-height:1.5}
 
-.pro-card h3{font-size:17px;font-weight:700;font-family:'Inter'}
+.pro-card h3{font-size:1.1rem;font-weight:700;font-family:'Inter'}
 .tournament-card p,.team-content p,.text-muted-custom{color:var(--muted);font-size:13px}
 .card-topline,.section-title-row{display:flex;align-items:center;justify-content:space-between;gap:12px}
-.mini-icon{color:var(--gold)}
-.muted-row{display:flex;gap:8px;align-items:center;color:#B7BFCB;font-size:13px;margin:12px 0}
+.mini-icon{color:var(--primary)}
+.muted-row{display:flex;gap:8px;align-items:center;color:var(--muted);font-size:13px;margin:12px 0}
 .muted-row svg{color:var(--muted)}
-.card-footer-line{border-top:1px solid var(--line);padding-top:11px;color:#5C6472;font-size:11px;margin-top:18px}
+.card-footer-line{border-top:1px solid var(--line);padding-top:11px;color:var(--muted);font-size:11px;margin-top:18px}
 .team-card{display:flex;align-items:center;gap:15px}
-.team-avatar,.team-dot{display:flex;align-items:center;justify-content:center;background:var(--panel-2);border:1px solid var(--line);color:var(--gold);font-weight:700}
-.team-avatar{width:52px;height:52px;border-radius:var(--radius-sm);font-size:21px}
+.team-avatar,.team-dot{display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#dbeafe,#eff6ff);border:1px solid rgba(37,99,235,.1);color:var(--primary-deep);font-weight:800}
+.team-avatar{width:52px;height:52px;border-radius:12px;font-size:21px}
 .team-content{flex:1}
 .team-content h3{margin:3px 0}
-.icon-btn{width:34px;height:34px;border-radius:var(--radius-sm);border:1px solid var(--line);background:transparent;color:var(--muted);display:flex;align-items:center;justify-content:center}
-.icon-btn:hover{background:rgba(255,255,255,.05);color:#fff}
+.icon-btn{width:34px;height:34px;border-radius:10px;border:1px solid var(--line);background:transparent;color:var(--muted);display:flex;align-items:center;justify-content:center}
+.icon-btn:hover{background:var(--panel-alt);color:var(--text)}
 
 /* ---------- forms ---------- */
-.form-panel{max-width:900px}
-.narrow-panel{max-width:600px}
-.form-panel-icon{color:var(--gold);margin-bottom:16px}
+.form-panel{max-width:960px}
+.narrow-panel{max-width:620px}
+.form-panel-icon{color:var(--primary);margin-bottom:16px}
 .form-panel-icon svg{width:30px;height:30px}
-.field-label{display:block;font-size:11.5px;color:#AEB8CC;font-weight:600;margin-bottom:7px}
-.pro-input{width:100%;border:1px solid rgba(255,255,255,.1);background:#0A0C10;color:#fff;border-radius:var(--radius-sm);padding:11px 13px;outline:none;font-size:14px;transition:border-color .15s}
-.pro-input:focus{border-color:var(--gold)}
-.pro-input::placeholder{color:#565F6F}
+.field-label{display:block;font-size:11.5px;color:#42516a;font-weight:700;margin-bottom:8px}
+.pro-input{width:100%;border:1px solid var(--line);background:var(--panel-alt);color:var(--text);border-radius:12px;padding:11px 13px;outline:none;font-size:14px;transition:border-color .15s,box-shadow .15s}
+.pro-input:focus{border-color:rgba(37,99,235,.45);box-shadow:0 0 0 4px rgba(37,99,235,.08)}
+.pro-input::placeholder{color:#7c8ba3}
 .input-with-action{position:relative}
 .input-with-action .pro-input{padding-right:42px}
-.input-action-btn{position:absolute;top:50%;right:6px;transform:translateY(-50%);width:30px;height:30px;border:0;background:transparent;color:var(--muted);display:flex;align-items:center;justify-content:center;border-radius:var(--radius-sm)}
-.input-action-btn:hover{color:#fff;background:rgba(255,255,255,.06)}
-.pro-input option{background:#12151B;color:#fff}
+.input-action-btn{position:absolute;top:50%;right:6px;transform:translateY(-50%);width:30px;height:30px;border:0;background:transparent;color:var(--muted);display:flex;align-items:center;justify-content:center;border-radius:10px}
+.input-action-btn:hover{color:var(--text);background:rgba(15,23,42,.03)}
+.pro-input option{background:#fff;color:var(--text)}
 .pro-textarea{min-height:140px;resize:vertical}
-.pro-btn{border-radius:var(--radius-sm);padding:10px 18px;border:1px solid transparent;font-weight:600;font-size:13.5px;transition:filter .15s,background .15s}
-.pro-btn-primary{background:var(--gold);color:#181206}
-.pro-btn-primary:hover{filter:brightness(1.08)}
-.pro-btn-outline{background:transparent;border-color:var(--line);color:#C9D1DF}
-.pro-btn-outline:hover{background:rgba(255,255,255,.05);color:#fff}
-.pro-btn:disabled{opacity:.4;cursor:not-allowed}
-.info-callout{border:1px solid rgba(63,182,166,.25);background:var(--teal-dim);color:#9FE3D8;border-radius:var(--radius-sm);padding:11px 13px;font-size:12.5px}
+.pro-btn{border-radius:12px;padding:11px 18px;border:1px solid transparent;font-weight:700;font-size:14px;transition:all .15s ease}
+.pro-btn-primary{background:var(--primary);color:#fff;box-shadow:0 10px 20px rgba(37,99,235,.18)}
+.pro-btn-primary:hover{background:var(--primary-deep)}
+.pro-btn-outline{background:var(--panel);border-color:var(--line);color:var(--text)}
+.pro-btn-outline:hover{background:var(--panel-alt)}
+.pro-btn:disabled{opacity:.5;cursor:not-allowed}
+.info-callout{border:1px solid rgba(37,99,235,.12);background:var(--primary-soft);color:var(--primary-deep);border-radius:12px;padding:11px 13px;font-size:12.5px}
 
 /* ---------- banners / badges ---------- */
-.message-banner{border:1px solid rgba(63,182,166,.28);background:var(--teal-dim);color:#B9EFE6;border-radius:var(--radius-sm);padding:10px 14px;font-size:13px;margin:14px 0}
-.status-badge,.role-badge{display:inline-flex;align-items:center;border-radius:var(--radius-sm);padding:4px 9px;font-size:10.5px;font-weight:700}
-.status-badge.pending{background:var(--gold-dim);color:var(--gold)}
-.status-badge.approved,.status-badge.completed{background:var(--teal-dim);color:var(--teal)}
-.status-badge.upcoming,.status-badge.scheduled{background:rgba(255,255,255,.07);color:#C9D1DF}
-.status-badge.default{background:rgba(255,255,255,.06);color:#9AA3B2}
-.role-badge{background:var(--gold-dim);color:var(--gold)}
-.count-pill{border:1px solid var(--line);background:transparent;border-radius:var(--radius-sm);padding:5px 10px;color:var(--muted);font-size:11px;font-weight:500}
-.small-action{border:0;border-radius:var(--radius-sm);padding:6px 10px;font-size:11px;font-weight:700}
-.small-action.approve{background:var(--teal-dim);color:var(--teal)}
+.message-banner{border:1px solid rgba(16,185,129,.2);background:var(--success-soft);color:#047857;border-radius:12px;padding:10px 14px;font-size:13px;margin:14px 0}
+.status-badge,.role-badge{display:inline-flex;align-items:center;border-radius:999px;padding:6px 10px;font-size:10.5px;font-weight:700}
+.status-badge.pending{background:var(--warning-soft);color:#b45309}
+.status-badge.approved,.status-badge.completed{background:var(--success-soft);color:#047857}
+.status-badge.upcoming,.status-badge.scheduled{background:var(--primary-soft);color:var(--primary-deep)}
+.status-badge.default{background:#f1f5f9;color:#475569}
+.role-badge{background:var(--primary-soft);color:var(--primary-deep)}
+.count-pill{border:1px solid var(--line);background:var(--panel-alt);border-radius:999px;padding:5px 10px;color:var(--muted);font-size:11px;font-weight:700}
+.small-action{border:0;border-radius:10px;padding:7px 10px;font-size:11px;font-weight:800}
+.small-action.approve{background:var(--success-soft);color:#047857}
+.small-action.reject{background:var(--danger-soft);color:#b91c1c}
 .table-wrap{overflow:auto}
-.pro-table{width:100%;border-collapse:separate;border-spacing:0;color:#D8DEEA;font-size:12.5px}
-.pro-table th{color:#7D89A3;font-weight:600;font-size:10.5px;text-align:left;border-bottom:1px solid var(--line);padding:11px}
-.pro-table td{padding:13px 11px;border-bottom:1px solid rgba(255,255,255,.05);vertical-align:middle}
+.pro-table{width:100%;border-collapse:separate;border-spacing:0;color:var(--text);font-size:12.5px}
+.pro-table th{color:#596a82;font-weight:700;font-size:10.5px;text-align:left;border-bottom:1px solid var(--line);padding:12px}
+.pro-table td{padding:14px 12px;border-bottom:1px solid var(--line);vertical-align:middle}
 .pro-table tr:last-child td{border-bottom:0}
-.pro-table tbody tr:hover td{background:rgba(255,255,255,.02)}
-.action-tag{font-size:10px;font-weight:600;color:var(--gold);background:var(--gold-dim);padding:4px 7px;border-radius:5px}
+.pro-table tbody tr:hover td{background:rgba(37,99,235,.015)}
+.action-tag{font-size:10px;font-weight:700;color:var(--primary-deep);background:var(--primary-soft);padding:4px 7px;border-radius:999px}
 .match-card{padding:22px}
 .match-teams{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:16px;text-align:center}
-.match-teams>div{display:flex;flex-direction:column;align-items:center;gap:9px}
-.team-dot{width:42px;height:42px;border-radius:var(--radius-sm)}
-.vs{font-size:11px;font-weight:700;color:#5C6472;font-family:'Barlow Condensed'}
+.match-teams>div{display:flex;flex-direction:column;align-items:center;gap:10px}
+.team-dot{width:42px;height:42px;border-radius:12px;font-size:1.1rem}
+.vs{font-size:11px;font-weight:800;color:var(--muted);font-family:'Barlow Condensed'}
 .match-meta{display:flex;justify-content:space-between;gap:12px;color:var(--muted);font-size:11px;border-top:1px solid var(--line);border-bottom:1px solid var(--line);padding:11px 0;margin-top:16px}
 .match-meta span{display:flex;align-items:center;gap:5px}
 .result-strip{display:flex;justify-content:space-between;gap:10px;align-items:center;padding-top:13px;color:var(--muted);font-size:11px}
-.result-strip strong{color:#fff;font-size:16px;font-weight:700}
-.rank-badge{display:inline-flex;width:26px;height:26px;border-radius:var(--radius-sm);align-items:center;justify-content:center;background:rgba(255,255,255,.05);font-weight:700}
-.rank-1{background:var(--gold-dim);color:var(--gold)}
-.rank-2{background:rgba(255,255,255,.09);color:#E2E8F0}
-.rank-3{background:rgba(216,161,62,.08);color:#C99B57}
-.points-value{font-weight:700;color:var(--gold);font-size:15px}
-.empty-state{text-align:center;padding:50px 20px;border:1px dashed var(--line);border-radius:var(--radius-md);color:var(--muted)}
-.empty-icon{color:#454C58;margin-bottom:10px}
+.result-strip strong{color:var(--text);font-size:16px;font-weight:800}
+.rank-badge{display:inline-flex;width:26px;height:26px;border-radius:10px;align-items:center;justify-content:center;background:var(--panel-alt);font-weight:800}
+.rank-1{background:var(--warning-soft);color:#b45309}
+.rank-2{background:var(--primary-soft);color:var(--primary-deep)}
+.rank-3{background:#edf7ff;color:#1d4ed8}
+.points-value{font-weight:800;color:var(--primary-deep);font-size:15px}
+.empty-state{text-align:center;padding:44px 20px;border:1px dashed var(--line);border-radius:18px;color:var(--muted);background:rgba(255,255,255,.5)}
+.empty-icon{color:var(--primary);margin-bottom:10px}
 .empty-icon svg{width:30px;height:30px}
-.empty-state h3{font-size:16px;color:#E9EDF5;font-family:'Inter';font-weight:700}
+.empty-state h3{font-size:16px;color:var(--text);font-family:'Inter';font-weight:700}
 .empty-state p{font-size:12.5px}
 .empty-state.compact{padding:24px 15px}
 
 /* ---------- auth ---------- */
-.auth-shell{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:30px;
-  background:radial-gradient(600px 380px at 12% 15%, rgba(216,161,62,.08), transparent 55%), var(--ink)}
-.auth-card{width:100%;max-width:440px;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:32px;box-shadow:0 24px 60px rgba(0,0,0,.4)}
-.auth-card-wide{max-width:640px}
-.auth-brand{display:flex;align-items:center;gap:12px;margin-bottom:28px}
-.auth-heading{margin-bottom:22px}
-.auth-heading h1{font-size:26px;font-weight:700;margin:7px 0}
-.auth-heading p{color:var(--muted);font-size:13px;line-height:1.6}
-.password-panel{background:rgba(255,255,255,.03);border:1px solid var(--line);padding:12px;border-radius:var(--radius-sm);margin-top:8px}
-.password-panel-title{font-size:11.5px;font-weight:600;color:#AEB8CC;margin-bottom:8px}
+.auth-shell{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:32px 20px;background:var(--bg)}
+.auth-card{width:100%;max-width:440px;background:rgba(255,255,255,.95);border:1px solid var(--line);border-radius:24px;padding:30px 28px;box-shadow:var(--shadow);margin:0 auto}
+.auth-card-wide{max-width:620px}
+.auth-brand{display:flex;align-items:center;gap:12px;margin-bottom:20px}
+.auth-heading{margin-bottom:20px}
+.auth-heading h1{font-size:2.2rem;font-weight:800;line-height:1.1;margin:7px 0;letter-spacing:-.06em}
+.auth-heading p{color:var(--muted);font-size:14px;line-height:1.6}
+.password-panel{background:var(--panel-alt);border:1px solid var(--line);padding:12px;border-radius:12px;margin-top:8px}
+.password-panel-title{font-size:11.5px;font-weight:700;color:#475569;margin-bottom:8px}
 .password-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:11.5px}
-.rule-ok{color:var(--teal)}
-.rule-bad{color:#6C7686}
-.auth-divider{display:flex;align-items:center;gap:10px;color:#5C6472;font-size:11px;font-weight:500;margin:20px 0}
+.rule-ok{color:var(--success)}
+.rule-bad{color:#7a8697}
+.auth-divider{display:flex;align-items:center;gap:10px;color:#6b7280;font-size:11px;font-weight:700;margin:18px 0}
 .auth-divider:before,.auth-divider:after{content:"";height:1px;background:var(--line);flex:1}
 
-@media(max-width:900px){.ems-sidebar{width:200px}.ems-main{margin-left:200px;padding:22px}.page-intro{align-items:flex-start}.hero-icon{display:none}}
-@media(max-width:700px){.ems-sidebar{position:relative;width:100%;height:auto;min-height:0;padding:16px}.ems-main{margin-left:0;padding:18px}.logout-side{margin-top:14px}.side-nav{display:grid;grid-template-columns:1fr 1fr;gap:4px}.page-intro{display:block}.page-intro .role-badge{margin-top:12px}.hero-panel{padding:20px}.auth-card{padding:22px}.match-meta{display:block}.match-meta span{margin:4px 0}}
+@media(max-width:980px){
+  .ems-sidebar{width:220px}.ems-main{margin-left:220px;padding:20px}.auth-card{max-width:560px}
+}
+
+@media(max-width:760px){
+  .ems-sidebar{position:relative;width:100%;height:auto;min-height:0;padding:16px;border-right:none;border-bottom:1px solid var(--line)}
+  .ems-main{margin-left:0;padding:18px}.logout-side{margin-top:14px}.side-nav{display:grid;grid-template-columns:1fr 1fr;gap:6px}.page-intro{display:block}.page-intro .role-badge{margin-top:12px}.hero-panel{padding:20px}.match-meta{display:block}.match-meta span{margin:4px 0}.auth-card{padding:22px}
+}
 `;
 
 const NAV_MAIN = [
-  { key: "dashboard", label: "Dashboard", icon: <Icon.Trophy /> },
-  { key: "tournaments", label: "Tournaments", icon: <Icon.Trophy /> },
-  { key: "teams", label: "Teams", icon: <Icon.Users /> },
-  { key: "matches", label: "Matches", icon: <Icon.Target /> },
-  { key: "leaderboard", label: "Leaderboard", icon: <Icon.Chart /> },
-  { key: "teamMembers", label: "Team members", icon: <Icon.Person /> },
+  { key: "tournaments", label: "Upcoming Tournaments", icon: <Icon.Trophy /> },
+  { key: "playerApplications", label: "Apply to Match", icon: <Icon.Clipboard /> },
+  { key: "approvedApplications", label: "Approved Applications", icon: <Icon.Medal /> },
+  { key: "leaderboard", label: "Scoreboard", icon: <Icon.Chart /> },
 ];
 
 const AppLayout = ({ user, page, setPage, logout, children }) => {
   const go = (target) => setPage(target);
+
+  const organizerNav = [
+    { key: "dashboard", label: "Dashboard", icon: <Icon.Trophy /> },
+    { key: "createTournament", label: "Create Tournament", icon: <Icon.Plus /> },
+    { key: "applications", label: "Approve Players", icon: <Icon.Clipboard /> },
+    { key: "matchResult", label: "Scoreboard", icon: <Icon.Medal /> },
+  ];
+
+  const playerNav = NAV_MAIN;
 
   return (
     <>
@@ -1886,32 +1879,18 @@ const AppLayout = ({ user, page, setPage, logout, children }) => {
         <aside className="ems-sidebar">
           <div className="brand">
             <div className="brand-mark"><Icon.Trophy /></div>
-            <div><div className="brand-name">Arenaboard</div><div className="brand-subtitle">Esports operations</div></div>
+            <div><div className="brand-name">Esports Management</div><div className="brand-subtitle">Professional operations</div></div>
           </div>
-          <div className="side-label">Main menu</div>
+
           <div className="side-nav">
-            {NAV_MAIN.filter((item) =>
-              ["dashboard", "tournaments", "matches", "leaderboard"].includes(item.key)
-            ).map((item) => (
+            {(user?.role === "ORGANIZER" ? organizerNav : playerNav).map((item) => (
               <button key={item.key} className={`side-btn ${page === item.key ? "active" : ""}`} onClick={() => go(item.key)}>
                 {item.icon}{item.label}
               </button>
             ))}
           </div>
 
-          <div className="side-label">My workspace</div>
-          <div className="side-nav">
-            {user?.role === "PLAYER" && <button className={`side-btn ${page === "playerApplications" ? "active" : ""}`} onClick={() => go("playerApplications")}><Icon.Clipboard />Apply to play</button>}
-            {user?.role === "ORGANIZER" && <>
-              <button className={`side-btn ${page === "createTournament" ? "active" : ""}`} onClick={() => go("createTournament")}><Icon.Plus />Create tournament</button>
-              <button className={`side-btn ${page === "applications" ? "active" : ""}`} onClick={() => go("applications")}><Icon.Clipboard />Player applications</button>
-              <button className={`side-btn ${page === "scheduleMatch" ? "active" : ""}`} onClick={() => go("scheduleMatch")}><Icon.Calendar />Schedule match</button>
-              <button className={`side-btn ${page === "matchResult" ? "active" : ""}`} onClick={() => go("matchResult")}><Icon.Medal />Match result</button>
-            </>}
-            {user?.role === "ADMIN" && <button className={`side-btn ${page === "admin" ? "active" : ""}`} onClick={() => go("admin")}><Icon.Gear />Admin panel</button>}
-          </div>
-
-          <div className="logout-side"><button className="side-logout" onClick={logout}><Icon.Logout />Log out</button></div>
+          <div className="logout-side"><button className="side-logout" onClick={logout}><Icon.Logout />Logout</button></div>
         </aside>
         <main className="ems-main">
           <div className="top-userbar">
