@@ -25,8 +25,7 @@ function App() {
 
   const [selectedTournament, setSelectedTournament] = useState("");
   const [selectedTeam, setSelectedTeam] = useState("");
-  const [selectedPlayer, setSelectedPlayer] = useState("");
-  const [selectedPlayer2, setSelectedPlayer2] = useState("");
+  const [selectedTeam2, setSelectedTeam2] = useState("");
   const [matchDate, setMatchDate] = useState("");
 
   const [selectedMatch, setSelectedMatch] = useState("");
@@ -567,23 +566,39 @@ const createTeam = async () => {
   // SCHEDULE MATCH
   // =========================
 
+  const openScheduleMatch = async () => {
+    try {
+      const token = localStorage.getItem("access_token");
+      const [tournamentsResponse, teamsResponse, registrationsResponse] = await Promise.all([
+        axios.get(`${API_URL}/tournaments/`),
+        axios.get(`${API_URL}/teams/`),
+        axios.get(`${API_URL}/registrations/`, {
+          headers: { Authorization: "Bearer " + token },
+        }),
+      ]);
+      setTournaments(tournamentsResponse.data);
+      setTeams(teamsResponse.data);
+      setRegistrations(registrationsResponse.data);
+      setPage("scheduleMatch");
+      setMessage("");
+    } catch (error) {
+      setMessage(error.response?.data?.detail || "Could not load teams for scheduling");
+    }
+  };
+
   const scheduleMatch = async () => {
     if (
       !selectedTournament ||
-      !selectedPlayer ||
-      !selectedPlayer2 ||
+      !selectedTeam ||
+      !selectedTeam2 ||
       !matchDate
     ) {
-      setMessage(
-        "Please select tournament, both players and match date"
-      );
+      setMessage("Please select tournament, both teams and match date");
       return;
     }
 
-    if (selectedPlayer === selectedPlayer2) {
-      setMessage(
-        "A player cannot play against themselves"
-      );
+    if (selectedTeam === selectedTeam2) {
+      setMessage("A team cannot play against itself");
       return;
     }
 
@@ -591,8 +606,8 @@ const createTeam = async () => {
       const token = localStorage.getItem("access_token");
       await axios.post(`${API_URL}/matches/`, {
         tournament_id: Number(selectedTournament),
-        player1_id: Number(selectedPlayer),
-        player2_id: Number(selectedPlayer2),
+        team1_id: Number(selectedTeam),
+        team2_id: Number(selectedTeam2),
         match_date: matchDate,
       }, {
         headers: { Authorization: "Bearer " + token },
@@ -604,8 +619,7 @@ const createTeam = async () => {
 
       setSelectedTournament("");
       setSelectedTeam("");
-      setSelectedPlayer("");
-      setSelectedPlayer2("");
+      setSelectedTeam2("");
       setMatchDate("");
 
       openMatches();
@@ -1011,6 +1025,7 @@ const createTeam = async () => {
             <>
               <ActionCard icon={<Icon.Plus />} title="Create tournament" text="Post a tournament for players to apply." onClick={() => setPage("createTournament")} accent />
               <ActionCard icon={<Icon.Clipboard />} title="Approve players" text="Review applications for your tournaments only." onClick={openManageApplications} />
+              <ActionCard icon={<Icon.Calendar />} title="Schedule match" text="Schedule a match between two approved teams." onClick={openScheduleMatch} />
               <ActionCard icon={<Icon.Medal />} title="Scoreboard" text="Enter the final score for completed match results and update standings." onClick={openScoreEntry} />
             </>
           )}
@@ -1446,27 +1461,27 @@ const createTeam = async () => {
   // =========================
 
   if (page === "scheduleMatch") {
-    const approvedApplications = registrations.filter(
+    const approvedRegistrations = registrations.filter(
       (registration) =>
         registration.status === "approved" &&
         String(registration.tournament_id) === String(selectedTournament)
     );
-    const player2Options = approvedApplications.filter(
-      (application) => String(application.player_id) !== String(selectedPlayer)
+    const team2Options = approvedRegistrations.filter(
+      (registration) => String(registration.team_id) !== String(selectedTeam)
     );
 
     return (
       <AppLayout user={user} page={page} setPage={setPage} logout={logout}>
-        <PageHeader eyebrow="Organizer workspace" title="Schedule match" subtitle="Create a fixture between approved tournament players." />
+        <PageHeader eyebrow="Organizer workspace" title="Schedule match" subtitle="Create a fixture between two approved tournament teams." />
         <div className="form-panel">
           <div className="form-panel-icon"><Icon.Calendar /></div>
           <div className="row g-4">
-            <div className="col-12"><label className="field-label">Tournament</label><select className="pro-input" value={selectedTournament} onChange={(e) => { setSelectedTournament(e.target.value); setSelectedPlayer(""); setSelectedPlayer2(""); }}><option value="">Select tournament</option>{tournaments.map((tournament) => <option key={tournament.id} value={tournament.id}>{tournament.name}</option>)}</select></div>
-            <div className="col-md-6"><label className="field-label">Player 1</label><select className="pro-input" value={selectedPlayer} onChange={(e) => { setSelectedPlayer(e.target.value); setSelectedPlayer2(""); }}><option value="">Select player</option>{approvedApplications.map((application) => <option key={application.player_id} value={application.player_id}>{application.player_username}</option>)}</select></div>
-            <div className="col-md-6"><label className="field-label">Player 2</label><select className="pro-input" value={selectedPlayer2} onChange={(e) => setSelectedPlayer2(e.target.value)} disabled={!selectedPlayer}><option value="">Select a different player</option>{player2Options.map((application) => <option key={application.player_id} value={application.player_id}>{application.player_username}</option>)}</select></div>
+            <div className="col-12"><label className="field-label">Tournament</label><select className="pro-input" value={selectedTournament} onChange={(e) => { setSelectedTournament(e.target.value); setSelectedTeam(""); setSelectedTeam2(""); }}><option value="">Select tournament</option>{tournaments.map((tournament) => <option key={tournament.id} value={tournament.id}>{tournament.name}</option>)}</select></div>
+            <div className="col-md-6"><label className="field-label">Team 1</label><select className="pro-input" value={selectedTeam} onChange={(e) => { setSelectedTeam(e.target.value); setSelectedTeam2(""); }} disabled={!selectedTournament}><option value="">Select team</option>{approvedRegistrations.map((registration) => <option key={registration.team_id} value={registration.team_id}>{registration.team_name}</option>)}</select></div>
+            <div className="col-md-6"><label className="field-label">Team 2</label><select className="pro-input" value={selectedTeam2} onChange={(e) => setSelectedTeam2(e.target.value)} disabled={!selectedTeam}><option value="">Select a different team</option>{team2Options.map((registration) => <option key={registration.team_id} value={registration.team_id}>{registration.team_name}</option>)}</select></div>
             <div className="col-md-6"><label className="field-label">Match date and time</label><input type="datetime-local" className="pro-input" value={matchDate} onChange={(e) => setMatchDate(e.target.value)} /></div>
           </div>
-          <div className="info-callout mt-4">Only players with approved applications for this tournament are available.</div>
+          <div className="info-callout mt-4">Only teams with approved registrations for this tournament are available.</div>
           <div className="d-flex gap-2 mt-4"><button className="pro-btn pro-btn-primary" onClick={scheduleMatch}>Schedule match</button><button className="pro-btn pro-btn-outline" onClick={() => setPage("dashboard")}>Cancel</button></div>
           {message && <MessageBanner message={message} />}
         </div>
@@ -1867,6 +1882,7 @@ const AppLayout = ({ user, page, setPage, logout, children }) => {
     { key: "dashboard", label: "Dashboard", icon: <Icon.Trophy /> },
     { key: "createTournament", label: "Create Tournament", icon: <Icon.Plus /> },
     { key: "applications", label: "Approve Players", icon: <Icon.Clipboard /> },
+    { key: "scheduleMatch", label: "Schedule Match", icon: <Icon.Calendar /> },
     { key: "matchResult", label: "Scoreboard", icon: <Icon.Medal /> },
   ];
 
