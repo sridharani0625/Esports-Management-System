@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 from pydantic import BaseModel
-from datetime import datetime
+from datetime import datetime, timezone
 import re
 
 from app.database import get_db
@@ -121,11 +121,27 @@ def get_matches(
     """)
 
     result = db.execute(query)
+    rows = result.fetchall()
+    result.close()
 
-    return [
-        dict(row._mapping)
-        for row in result
-    ]
+    matches = []
+    now = datetime.now(timezone.utc)
+    for row in rows:
+        match = dict(row._mapping)
+        match_date = match.get("match_date")
+        if match.get("result"):
+            match["status"] = "completed"
+        elif match_date and (
+            match_date.replace(tzinfo=timezone.utc)
+            if match_date.tzinfo is None
+            else match_date
+        ) <= now:
+            match["status"] = "running"
+        else:
+            match["status"] = "upcoming"
+        matches.append(match)
+
+    return matches
 
 
 # =========================

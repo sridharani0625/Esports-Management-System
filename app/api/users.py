@@ -3,7 +3,7 @@ import os
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy import func
+from sqlalchemy import func, or_
 import jwt
 from datetime import datetime, timedelta
 from passlib.context import CryptContext
@@ -185,10 +185,13 @@ def login(
     db: Session = Depends(get_db)
 ):
 
-    email = user.email.strip().lower()
+    identifier = user.email.strip().lower()
 
     db_user = db.query(User).filter(
-        func.lower(User.email) == email
+        or_(
+            func.lower(User.email) == identifier,
+            func.lower(User.username) == identifier,
+        )
     ).first()
 
     if not db_user:
