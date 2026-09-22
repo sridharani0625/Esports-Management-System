@@ -1025,6 +1025,7 @@ const createTeam = async () => {
             <>
               <ActionCard icon={<Icon.Plus />} title="Create tournament" text="Post a tournament for players to apply." onClick={() => setPage("createTournament")} accent />
               <ActionCard icon={<Icon.Clipboard />} title="Approve players" text="Review applications for your tournaments only." onClick={openManageApplications} />
+              <ActionCard icon={<Icon.Users />} title="Approve teams" text="Approve registered teams before scheduling them into matches." onClick={openManageRegistrations} />
               <ActionCard icon={<Icon.Calendar />} title="Schedule match" text="Schedule a match between two approved teams." onClick={openScheduleMatch} />
               <ActionCard icon={<Icon.Medal />} title="Scoreboard" text="Enter the final score for completed match results and update standings." onClick={openScoreEntry} />
             </>
@@ -1378,10 +1379,10 @@ const createTeam = async () => {
   if (page === "registrations") {
     return (
       <AppLayout user={user} page={page} setPage={setPage} logout={logout}>
-        <PageHeader eyebrow="Legacy team workflow" title="Registrations" subtitle="Legacy team registrations are retained for existing data." />
+        <PageHeader eyebrow="Organizer workspace" title="Approve teams" subtitle="Approve registered teams before scheduling them in a match." />
         {message && <MessageBanner message={message} />}
         {registrations.length === 0 ? (
-          <EmptyState icon={<Icon.Clipboard />} title="No registrations found" text="New team registrations will appear here." />
+          <EmptyState icon={<Icon.Users />} title="No team registrations found" text="Registered teams for your tournaments will appear here." />
         ) : (
           <div className="pro-card">
             <div className="table-wrap">
@@ -1463,8 +1464,9 @@ const createTeam = async () => {
   if (page === "scheduleMatch") {
     const approvedRegistrations = registrations.filter(
       (registration) =>
-        registration.status === "approved" &&
-        String(registration.tournament_id) === String(selectedTournament)
+        String(registration.status).toLowerCase() === "approved" &&
+        String(registration.tournament_id) === String(selectedTournament) &&
+        registration.team_id
     );
     const team2Options = approvedRegistrations.filter(
       (registration) => String(registration.team_id) !== String(selectedTeam)
@@ -1477,11 +1479,11 @@ const createTeam = async () => {
           <div className="form-panel-icon"><Icon.Calendar /></div>
           <div className="row g-4">
             <div className="col-12"><label className="field-label">Tournament</label><select className="pro-input" value={selectedTournament} onChange={(e) => { setSelectedTournament(e.target.value); setSelectedTeam(""); setSelectedTeam2(""); }}><option value="">Select tournament</option>{tournaments.map((tournament) => <option key={tournament.id} value={tournament.id}>{tournament.name}</option>)}</select></div>
-            <div className="col-md-6"><label className="field-label">Team 1</label><select className="pro-input" value={selectedTeam} onChange={(e) => { setSelectedTeam(e.target.value); setSelectedTeam2(""); }} disabled={!selectedTournament}><option value="">Select team</option>{approvedRegistrations.map((registration) => <option key={registration.team_id} value={registration.team_id}>{registration.team_name}</option>)}</select></div>
-            <div className="col-md-6"><label className="field-label">Team 2</label><select className="pro-input" value={selectedTeam2} onChange={(e) => setSelectedTeam2(e.target.value)} disabled={!selectedTeam}><option value="">Select a different team</option>{team2Options.map((registration) => <option key={registration.team_id} value={registration.team_id}>{registration.team_name}</option>)}</select></div>
+            <div className="col-md-6"><label className="field-label">Team 1</label><select className="pro-input" value={selectedTeam} onChange={(e) => { setSelectedTeam(e.target.value); setSelectedTeam2(""); }} disabled={!selectedTournament || approvedRegistrations.length === 0}><option value="">{selectedTournament && approvedRegistrations.length === 0 ? "No approved teams" : "Select team"}</option>{approvedRegistrations.map((registration) => <option key={registration.team_id} value={registration.team_id}>{registration.team_name || `Team #${registration.team_id}`}</option>)}</select></div>
+            <div className="col-md-6"><label className="field-label">Team 2</label><select className="pro-input" value={selectedTeam2} onChange={(e) => setSelectedTeam2(e.target.value)} disabled={!selectedTeam}><option value="">Select a different team</option>{team2Options.map((registration) => <option key={registration.team_id} value={registration.team_id}>{registration.team_name || `Team #${registration.team_id}`}</option>)}</select></div>
             <div className="col-md-6"><label className="field-label">Match date and time</label><input type="datetime-local" className="pro-input" value={matchDate} onChange={(e) => setMatchDate(e.target.value)} /></div>
           </div>
-          <div className="info-callout mt-4">Only teams with approved registrations for this tournament are available.</div>
+          <div className="info-callout mt-4">Only teams with approved registrations for this tournament are available. Approve the team registrations before scheduling.</div>
           <div className="d-flex gap-2 mt-4"><button className="pro-btn pro-btn-primary" onClick={scheduleMatch}>Schedule match</button><button className="pro-btn pro-btn-outline" onClick={() => setPage("dashboard")}>Cancel</button></div>
           {message && <MessageBanner message={message} />}
         </div>
@@ -1882,6 +1884,7 @@ const AppLayout = ({ user, page, setPage, logout, children }) => {
     { key: "dashboard", label: "Dashboard", icon: <Icon.Trophy /> },
     { key: "createTournament", label: "Create Tournament", icon: <Icon.Plus /> },
     { key: "applications", label: "Approve Players", icon: <Icon.Clipboard /> },
+    { key: "registrations", label: "Approve Teams", icon: <Icon.Users /> },
     { key: "scheduleMatch", label: "Schedule Match", icon: <Icon.Calendar /> },
     { key: "matchResult", label: "Scoreboard", icon: <Icon.Medal /> },
   ];
