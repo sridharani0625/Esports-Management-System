@@ -22,7 +22,7 @@ services:
     staticPublishPath: dist
     envVars:
       - key: VITE_API_URL
-        value: https://esports-backend.onrender.com
+        value: https://esports-management-system.onrender.com
 
 databases:
   - name: esports-db
