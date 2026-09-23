@@ -9,6 +9,7 @@ from app.api.leaderboard import router as leaderboard_router
 from app.api.registration import router as registration_router
 from app.api.applications import router as applications_router
 from app.api.admin import router as admin_router
+from app.database import engine, Base
 
 
 # Create FastAPI application
@@ -21,15 +22,17 @@ app = FastAPI(
 # CORS configuration
 app.add_middleware(
     CORSMiddleware,
-    allow_origin_regex=r"https://.*\.onrender\.com|http://localhost:5173|http://127.0.0.1:5173",
-    allow_origins=[
-        "http://localhost:5173",
-        "http://127.0.0.1:5173",
-    ],
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
-    allow_headers=["*"]
+    allow_headers=["*"],
+    allow_origin_regex=r"https://.*\.onrender\.com|http://localhost:5173|http://127\.0\.0\.1:5173"
 )
+
+
+@app.on_event("startup")
+def startup():
+    Base.metadata.create_all(bind=engine)
 
 
 # API routers
