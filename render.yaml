@@ -13,10 +13,6 @@ services:
         fromDatabase:
           name: esports-db
           property: connectionString
-      - key: JWT_SECRET_KEY
-        value: CCuI9iLMnr2fZpq2n2YM5NK_OZMTY26bjsdpNubLBPk
-      - key: JWT_ALGORITHM
-        value: HS256
 
   - type: static
     name: esports-frontend
