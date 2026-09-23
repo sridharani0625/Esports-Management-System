@@ -2,7 +2,7 @@ import { useState } from "react";
 import axios from "axios";
 import "bootstrap/dist/css/bootstrap.min.css";
 
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
+const API_URL = import.meta.env.VITE_API_URL || "https://esports-backend.onrender.com";
 
 function App() {
   const [page, setPage] = useState("login");
