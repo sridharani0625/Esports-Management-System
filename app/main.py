@@ -21,10 +21,10 @@ app = FastAPI(
 # CORS configuration
 app.add_middleware(
     CORSMiddleware,
+    allow_origin_regex=r"https://.*\.onrender\.com|http://localhost:5173|http://127.0.0.1:5173",
     allow_origins=[
         "http://localhost:5173",
-        "https://esports-management-system.vercel.app",
-        "https://esports-management-system-1.onrender.com",
+        "http://127.0.0.1:5173",
     ],
     allow_credentials=True,
     allow_methods=["*"],

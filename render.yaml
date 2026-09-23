@@ -1,0 +1,31 @@
+services:
+  - type: web
+    name: esports-backend
+    env: python
+    plan: free
+    rootDir: .
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.0
+      - key: DATABASE_URL
+        fromDatabase:
+          name: esports-db
+          property: connectionString
+
+  - type: static
+    name: esports-frontend
+    plan: free
+    rootDir: frontend
+    buildCommand: npm install && npm run build
+    staticPublishPath: dist
+    envVars:
+      - key: VITE_API_URL
+        value: https://esports-backend.onrender.com
+
+databases:
+  - name: esports-db
+    databaseName: esports_db
+    user: esports_user
+    plan: free

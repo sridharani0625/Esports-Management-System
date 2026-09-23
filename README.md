@@ -4,10 +4,10 @@ A secure full-stack web application for managing esports tournaments, teams, mat
 
 ## 🚀 Live Application
 
-- **Frontend:** https://esports-management-system.vercel.app/
-- **Backend API:** https://esports-management-system.onrender.com/
-- **API Documentation:** https://esports-management-system.onrender.com/docs
-- **Health Check:** https://esports-management-system.onrender.com/health
+- **Frontend:** deployed on Render
+- **Backend API:** deployed on Render
+- **API Documentation:** https://<your-backend>.onrender.com/docs
+- **Health Check:** https://<your-backend>.onrender.com/health
 
 ---
 
@@ -21,7 +21,7 @@ The application follows a modern client-server architecture:
 
 **React Frontend → FastAPI REST API → PostgreSQL Database**
 
-The frontend is deployed using Vercel and the backend is deployed using Render.
+The frontend and backend are both deployed on Render, with PostgreSQL hosted by Render as the database layer.
 
 ---
 
@@ -34,7 +34,7 @@ The frontend is deployed using Vercel and the backend is deployed using Render.
                 ┌─────────────────────┐
                 │   React + Vite      │
                 │      Frontend       │
-                │       Vercel        │
+                │       Render        │
                 └──────────┬──────────┘
                            │
                      HTTP / REST API

@@ -2,7 +2,7 @@ import { useState } from "react";
 import axios from "axios";
 import "bootstrap/dist/css/bootstrap.min.css";
 
-const API_URL = "https://esports-management-system.onrender.com";
+const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
 
 function App() {
   const [page, setPage] = useState("login");
@@ -22,10 +22,13 @@ function App() {
   const [matches, setMatches] = useState([]);
   const [leaderboard, setLeaderboard] = useState([]);
   const [registrations, setRegistrations] = useState([]);
+  const [applications, setApplications] = useState([]);
 
   const [selectedTournament, setSelectedTournament] = useState("");
   const [selectedTeam, setSelectedTeam] = useState("");
   const [selectedTeam2, setSelectedTeam2] = useState("");
+  const [selectedPlayer, setSelectedPlayer] = useState("");
+  const [selectedPlayer2, setSelectedPlayer2] = useState("");
   const [matchDate, setMatchDate] = useState("");
 
   const [selectedMatch, setSelectedMatch] = useState("");
@@ -430,66 +433,6 @@ const createTeam = async () => {
   // MANAGE REGISTRATIONS
   // =========================
 
-  const openManageRegistrations = async () => {
-    try {
-      const token = localStorage.getItem("access_token");
-      const response = await axios.get(
-        `${API_URL}/registrations/`,
-        { headers: { Authorization: "Bearer " + token } }
-      );
-
-      setRegistrations(response.data);
-      setPage("registrations");
-      setMessage("");
-    } catch (error) {
-      setMessage(
-        error.response?.data?.detail ||
-          "Could not load registrations"
-      );
-    }
-  };
-
-  const approveRegistration = async (registrationId) => {
-    try {
-      const token = localStorage.getItem("access_token");
-      await axios.put(
-        `${API_URL}/registrations/${registrationId}/approve`,
-        {},
-        { headers: { Authorization: "Bearer " + token } }
-      );
-
-      setMessage(
-        "Registration approved successfully"
-      );
-
-      openManageRegistrations();
-    } catch (error) {
-      setMessage(
-        error.response?.data?.detail ||
-          "Could not approve registration"
-      );
-    }
-  };
-
-  const rejectRegistration = async (registrationId) => {
-    try {
-      const token = localStorage.getItem("access_token");
-      await axios.put(
-        `${API_URL}/registrations/${registrationId}/reject`,
-        {},
-        { headers: { Authorization: "Bearer " + token } }
-      );
-
-      setMessage("Registration rejected successfully");
-      openManageRegistrations();
-    } catch (error) {
-      setMessage(
-        error.response?.data?.detail ||
-          "Could not reject registration"
-      );
-    }
-  };
-
   const changeApplicationStatus = async (applicationId, status) => {
     try {
       const token = localStorage.getItem("access_token");
@@ -568,36 +511,40 @@ const createTeam = async () => {
   const openScheduleMatch = async () => {
     try {
       const token = localStorage.getItem("access_token");
-      const [tournamentsResponse, teamsResponse, registrationsResponse] = await Promise.all([
+      const [tournamentsResponse, teamsResponse, registrationsResponse, applicationsResponse] = await Promise.all([
         axios.get(`${API_URL}/tournaments/`),
         axios.get(`${API_URL}/teams/`),
         axios.get(`${API_URL}/registrations/`, {
+          headers: { Authorization: "Bearer " + token },
+        }),
+        axios.get(`${API_URL}/applications/`, {
           headers: { Authorization: "Bearer " + token },
         }),
       ]);
       setTournaments(tournamentsResponse.data);
       setTeams(teamsResponse.data);
       setRegistrations(registrationsResponse.data);
+      setApplications(applicationsResponse.data.filter((application) => application.status === "approved"));
       setPage("scheduleMatch");
       setMessage("");
     } catch (error) {
-      setMessage(error.response?.data?.detail || "Could not load teams for scheduling");
+      setMessage(error.response?.data?.detail || "Could not load schedule data");
     }
   };
 
   const scheduleMatch = async () => {
     if (
       !selectedTournament ||
-      !selectedTeam ||
-      !selectedTeam2 ||
+      !selectedPlayer ||
+      !selectedPlayer2 ||
       !matchDate
     ) {
-      setMessage("Please select tournament, both teams and match date");
+      setMessage("Please select tournament, both players and match date");
       return;
     }
 
-    if (selectedTeam === selectedTeam2) {
-      setMessage("A team cannot play against itself");
+    if (selectedPlayer === selectedPlayer2) {
+      setMessage("A player cannot play against themselves");
       return;
     }
 
@@ -605,8 +552,8 @@ const createTeam = async () => {
       const token = localStorage.getItem("access_token");
       await axios.post(`${API_URL}/matches/`, {
         tournament_id: Number(selectedTournament),
-        team1_id: Number(selectedTeam),
-        team2_id: Number(selectedTeam2),
+        player1_id: Number(selectedPlayer),
+        player2_id: Number(selectedPlayer2),
         match_date: matchDate,
       }, {
         headers: { Authorization: "Bearer " + token },
@@ -619,6 +566,8 @@ const createTeam = async () => {
       setSelectedTournament("");
       setSelectedTeam("");
       setSelectedTeam2("");
+      setSelectedPlayer("");
+      setSelectedPlayer2("");
       setMatchDate("");
 
       openMatches();
@@ -970,8 +919,7 @@ const createTeam = async () => {
             <>
               <ActionCard icon={<Icon.Plus />} title="Create tournament" text="Post a tournament for players to apply." onClick={() => setPage("createTournament")} accent />
               <ActionCard icon={<Icon.Clipboard />} title="Approve players" text="Review applications for your tournaments only." onClick={openManageApplications} />
-              <ActionCard icon={<Icon.Users />} title="Approve teams" text="Approve registered teams before scheduling them into matches." onClick={openManageRegistrations} />
-              <ActionCard icon={<Icon.Calendar />} title="Schedule match" text="Schedule a match between two approved teams." onClick={openScheduleMatch} />
+              <ActionCard icon={<Icon.Calendar />} title="Schedule match" text="Schedule a match between two approved players." onClick={openScheduleMatch} />
               <ActionCard icon={<Icon.Medal />} title="Scoreboard" text="Enter the final score for completed match results and update standings." onClick={openScoreEntry} />
             </>
           )}
@@ -1310,46 +1258,6 @@ const createTeam = async () => {
     );
   }
 
-  if (page === "registrations") {
-    return (
-      <AppLayout user={user} page={page} setPage={setPage} logout={logout}>
-        <PageHeader eyebrow="Organizer workspace" title="Approve teams" subtitle="Approve registered teams before scheduling them in a match." />
-        {message && <MessageBanner message={message} />}
-        {registrations.length === 0 ? (
-          <EmptyState icon={<Icon.Users />} title="No team registrations found" text="Registered teams for your tournaments will appear here." />
-        ) : (
-          <div className="pro-card">
-            <div className="table-wrap">
-              <table className="pro-table">
-                <thead><tr><th>Registration</th><th>Tournament</th><th>Team</th><th>Status</th><th>Action</th></tr></thead>
-                <tbody>
-                  {registrations.map((registration) => (
-                    <tr key={registration.id}>
-                      <td>#{registration.id}</td>
-                      <td><strong>{registration.tournament_name}</strong></td>
-                      <td>{registration.team_name}</td>
-                      <td><StatusBadge status={registration.status} /></td>
-                      <td>
-                        {registration.status === "pending" ? (
-                          <div className="d-flex gap-2">
-                            <button className="small-action approve" onClick={() => approveRegistration(registration.id)}>Approve</button>
-                            <button className="small-action reject" onClick={() => rejectRegistration(registration.id)}>Reject</button>
-                          </div>
-                        ) : (
-                          <span className="text-muted-custom">Completed</span>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
-      </AppLayout>
-    );
-  }
-
   // =========================
   // MATCHES
   // =========================
@@ -1386,28 +1294,28 @@ const createTeam = async () => {
   // =========================
 
   if (page === "scheduleMatch") {
-    const approvedRegistrations = registrations.filter(
-      (registration) =>
-        String(registration.status).toLowerCase() === "approved" &&
-        String(registration.tournament_id) === String(selectedTournament) &&
-        registration.team_id
+    const approvedPlayerApplications = applications.filter(
+      (application) =>
+        String(application.status).toLowerCase() === "approved" &&
+        String(application.tournament_id) === String(selectedTournament) &&
+        application.player_id
     );
-    const team2Options = approvedRegistrations.filter(
-      (registration) => String(registration.team_id) !== String(selectedTeam)
+    const player2Options = approvedPlayerApplications.filter(
+      (application) => String(application.player_id) !== String(selectedPlayer)
     );
 
     return (
       <AppLayout user={user} page={page} setPage={setPage} logout={logout}>
-        <PageHeader eyebrow="Organizer workspace" title="Schedule match" subtitle="Create a fixture between two approved tournament teams." />
+        <PageHeader eyebrow="Organizer workspace" title="Schedule match" subtitle="Create a fixture between two approved tournament players." />
         <div className="form-panel">
           <div className="form-panel-icon"><Icon.Calendar /></div>
           <div className="row g-4">
-            <div className="col-12"><label className="field-label">Tournament</label><select className="pro-input" value={selectedTournament} onChange={(e) => { setSelectedTournament(e.target.value); setSelectedTeam(""); setSelectedTeam2(""); }}><option value="">Select tournament</option>{tournaments.map((tournament) => <option key={tournament.id} value={tournament.id}>{tournament.name}</option>)}</select></div>
-            <div className="col-md-6"><label className="field-label">Team 1</label><select className="pro-input" value={selectedTeam} onChange={(e) => { setSelectedTeam(e.target.value); setSelectedTeam2(""); }} disabled={!selectedTournament || approvedRegistrations.length === 0}><option value="">{selectedTournament && approvedRegistrations.length === 0 ? "No approved teams" : "Select team"}</option>{approvedRegistrations.map((registration) => <option key={registration.team_id} value={registration.team_id}>{registration.team_name || `Team #${registration.team_id}`}</option>)}</select></div>
-            <div className="col-md-6"><label className="field-label">Team 2</label><select className="pro-input" value={selectedTeam2} onChange={(e) => setSelectedTeam2(e.target.value)} disabled={!selectedTeam}><option value="">Select a different team</option>{team2Options.map((registration) => <option key={registration.team_id} value={registration.team_id}>{registration.team_name || `Team #${registration.team_id}`}</option>)}</select></div>
+            <div className="col-12"><label className="field-label">Tournament</label><select className="pro-input" value={selectedTournament} onChange={(e) => { setSelectedTournament(e.target.value); setSelectedPlayer(""); setSelectedPlayer2(""); }}><option value="">Select tournament</option>{tournaments.map((tournament) => <option key={tournament.id} value={tournament.id}>{tournament.name}</option>)}</select></div>
+            <div className="col-md-6"><label className="field-label">Player 1</label><select className="pro-input" value={selectedPlayer} onChange={(e) => { setSelectedPlayer(e.target.value); setSelectedPlayer2(""); }} disabled={!selectedTournament || approvedPlayerApplications.length === 0}><option value="">{selectedTournament && approvedPlayerApplications.length === 0 ? "No approved players" : "Select player"}</option>{approvedPlayerApplications.map((application) => <option key={application.player_id} value={application.player_id}>{application.player_username || `Player #${application.player_id}`}</option>)}</select></div>
+            <div className="col-md-6"><label className="field-label">Player 2</label><select className="pro-input" value={selectedPlayer2} onChange={(e) => setSelectedPlayer2(e.target.value)} disabled={!selectedPlayer}><option value="">Select a different player</option>{player2Options.map((application) => <option key={application.player_id} value={application.player_id}>{application.player_username || `Player #${application.player_id}`}</option>)}</select></div>
             <div className="col-md-6"><label className="field-label">Match date and time</label><input type="datetime-local" className="pro-input" value={matchDate} onChange={(e) => setMatchDate(e.target.value)} /></div>
           </div>
-          <div className="info-callout mt-4">Only teams with approved registrations for this tournament are available. Approve the team registrations before scheduling.</div>
+          <div className="info-callout mt-4">Only players with approved applications for this tournament are available. Approve the player applications before scheduling.</div>
           <div className="d-flex gap-2 mt-4"><button className="pro-btn pro-btn-primary" onClick={scheduleMatch}>Schedule match</button><button className="pro-btn pro-btn-outline" onClick={() => setPage("dashboard")}>Cancel</button></div>
           {message && <MessageBanner message={message} />}
         </div>
@@ -1808,7 +1716,6 @@ const AppLayout = ({ user, page, setPage, logout, children }) => {
     { key: "dashboard", label: "Dashboard", icon: <Icon.Trophy /> },
     { key: "createTournament", label: "Create Tournament", icon: <Icon.Plus /> },
     { key: "applications", label: "Approve Players", icon: <Icon.Clipboard /> },
-    { key: "registrations", label: "Approve Teams", icon: <Icon.Users /> },
     { key: "scheduleMatch", label: "Schedule Match", icon: <Icon.Calendar /> },
     { key: "matchResult", label: "Scoreboard", icon: <Icon.Medal /> },
   ];
